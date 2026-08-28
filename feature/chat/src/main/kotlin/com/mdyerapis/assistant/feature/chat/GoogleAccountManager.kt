@@ -1,6 +1,7 @@
 package com.mdyerapis.assistant.feature.chat
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
@@ -55,6 +56,12 @@ class GoogleAccountManager @Inject constructor(
      * Launch the OAuth flow in a Chrome Custom Tab. The backend redirects
      * to Google's consent screen, then back to /oauth/google/callback,
      * which itself redirects to assistantapp://oauth-complete.
+     *
+     * Note: we launch from the Application context with FLAG_ACTIVITY_NEW_TASK
+     * because this is called from a ViewModel that doesn't hold an Activity
+     * reference. The Custom Tab will be brought to the foreground; our app's
+     * MainActivity is still in the back stack and gets resumed when the user
+     * finishes (or dismisses) the Custom Tab.
      */
     fun launchOAuthFlow() {
         val uri = "$baseUrl/oauth/google/start".toUri()
@@ -62,6 +69,7 @@ class GoogleAccountManager @Inject constructor(
             .setShowTitle(true)
             .setUrlBarHidingEnabled(true)
             .build()
+        intent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.launchUrl(context, uri)
     }
 
