@@ -7,14 +7,14 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.mdyerapis.assistant.R
+import com.mdyerapis.assistant.backendclient.DeviceTokenRegistrar
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
  * Receives FCM token updates and push notifications from the backend
  * reminder scheduler. The token is registered with the backend via
- * DeviceTokenApi on startup and whenever it refreshes.
+ * DeviceTokenRegistrar on startup and whenever it refreshes.
  */
 @AndroidEntryPoint
 class AssistantMessagingService : FirebaseMessagingService() {

@@ -1,13 +1,14 @@
 package com.mdyerapis.assistant.fcm
 
-import android.content.Context
 import com.mdyerapis.assistant.backendclient.DeviceTokenApi
+import com.mdyerapis.assistant.core.network.BearerAuthInterceptor
+import com.mdyerapis.assistant.core.security.BearerTokenRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -20,6 +21,15 @@ object FcmModule {
      * production assistant.llmclouds.au endpoint.
      */
     private const val BACKEND_BASE_URL = "https://assistant.llmclouds.au"
+
+    @Provides
+    @Singleton
+    fun provideFcmOkHttpClient(tokenRepository: BearerTokenRepository): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(BearerAuthInterceptor { tokenRepository.getToken() })
+            .build()
 
     @Provides
     @Singleton

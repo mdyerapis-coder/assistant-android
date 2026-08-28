@@ -1,10 +1,9 @@
-package com.mdyerapis.assistant.fcm
+package com.mdyerapis.assistant.backendclient
 
 import android.content.Context
 import android.provider.Settings
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
-import com.mdyerapis.assistant.backendclient.DeviceTokenApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
