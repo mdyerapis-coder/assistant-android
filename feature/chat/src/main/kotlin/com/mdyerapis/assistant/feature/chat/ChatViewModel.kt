@@ -5,14 +5,21 @@ import androidx.lifecycle.viewModelScope
 import com.mdyerapis.assistant.backendclient.ChatApiClient
 import com.mdyerapis.assistant.backendclient.ChatReducer
 import com.mdyerapis.assistant.backendclient.SseFrameCodec
+import com.mdyerapis.assistant.core.database.chat.ConversationStore
 import com.mdyerapis.assistant.core.model.ChatMessage
 import com.mdyerapis.assistant.core.model.ChatState
 import com.mdyerapis.assistant.core.network.OkHttpClientFactory
 import com.mdyerapis.assistant.core.security.BearerTokenRepository
+import com.mdyerapis.assistant.feature.localmodel.LlmInferenceService
+import com.mdyerapis.assistant.feature.localmodel.LocalModelRepository
+import com.mdyerapis.assistant.feature.localmodel.LocalModelSpec
+import com.mdyerapis.assistant.feature.localmodel.LocalModelState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -21,13 +28,98 @@ import javax.inject.Inject
 class ChatViewModel @Inject constructor(
     private val tokenRepository: BearerTokenRepository,
     private val googleAccountManager: GoogleAccountManager,
+    private val googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier,
+    private val modelPreferenceRepository: ModelPreferenceRepository,
+    private val localModelRepository: LocalModelRepository,
+    private val llmInferenceService: LlmInferenceService,
+    private val conversationStore: ConversationStore,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ChatUiState())
+    private val _uiState = MutableStateFlow(
+        ChatUiState(availableLocalSpecs = localModelRepository.availableSpecs)
+    )
     val uiState: StateFlow<ChatUiState> = _uiState
 
     private var apiClient: ChatApiClient? = null
     private var baseUrl: String = "https://assistant.llmclouds.au"
+
+    private var activeConversationId: String? = null
+    private var activeServerConversationId: String? = null
+
+    init {
+        initClient(baseUrl)
+        viewModelScope.launch {
+            googleOAuthCompletionNotifier.completionVersion.drop(1).collect {
+                refreshGoogleStatus()
+            }
+        }
+        viewModelScope.launch {
+            modelPreferenceRepository.appModelMode.collect { mode ->
+                _uiState.value = _uiState.value.copy(appModelMode = mode)
+            }
+        }
+        viewModelScope.launch {
+            localModelRepository.state.collect { state ->
+                _uiState.value = _uiState.value.copy(localModelState = state)
+            }
+        }
+        viewModelScope.launch {
+            localModelRepository.installedModels.collect { models ->
+                _uiState.value = _uiState.value.copy(installedLocalModels = models)
+            }
+        }
+        viewModelScope.launch {
+            localModelRepository.downloadState.collect { dlState ->
+                _uiState.value = _uiState.value.copy(localDownloadState = dlState)
+            }
+        }
+        viewModelScope.launch {
+            conversationStore.conversations.collect { sessions ->
+                _uiState.value = _uiState.value.copy(availableSessions = sessions)
+            }
+        }
+        // Hydrate the most recent conversation.
+        viewModelScope.launch {
+            val latest = conversationStore.conversations.first().firstOrNull()
+            if (latest != null) {
+                activeConversationId = latest.id
+                activeServerConversationId = latest.serverConversationId
+                _uiState.value = _uiState.value.copy(
+                    activeConversationId = latest.id,
+                    chatState = _uiState.value.chatState.copy(
+                        conversationId = latest.serverConversationId
+                    )
+                )
+                loadMessages(latest.id)
+            } else {
+                ensureConversation()
+            }
+        }
+    }
+
+    private suspend fun ensureConversation(): String {
+        val existing = activeConversationId
+        if (existing != null) return existing
+        val id = conversationStore.createConversation(
+            modelId = modelPreferenceRepository.getSelectedModelId(),
+            mode = _uiState.value.appModelMode.name,
+        )
+        activeConversationId = id
+        return id
+    }
+
+    private fun loadMessages(conversationId: String) {
+        viewModelScope.launch {
+            conversationStore.messagesFor(conversationId).collect { stored ->
+                val messages = stored.map {
+                    ChatMessage(id = it.id, role = it.role, content = it.content)
+                }
+                _uiState.value = _uiState.value.copy(
+                    chatState = _uiState.value.chatState.copy(messages = messages)
+                )
+            }
+        }
+    }
 
     fun initClient(baseUrl: String) {
         if (apiClient != null) return
@@ -45,6 +137,152 @@ class ChatViewModel @Inject constructor(
             .build()
         apiClient = ChatApiClient(client, baseUrl)
         refreshGoogleStatus()
+        loadModels()
+    }
+
+    private fun loadModels() {
+        val client = apiClient ?: return
+        _uiState.value = _uiState.value.copy(isLoadingModels = true, modelError = null)
+        viewModelScope.launch {
+            try {
+                val catalog = withContext(Dispatchers.IO) { client.listModels() }
+                val savedModelId = modelPreferenceRepository.getSelectedModelId()
+                val availableIds = catalog.models.mapTo(mutableSetOf()) { it.id }
+                val selectedModelId = when {
+                    savedModelId in availableIds -> savedModelId
+                    catalog.default_model_id in availableIds -> catalog.default_model_id
+                    else -> catalog.models.firstOrNull()?.id
+                }
+                modelPreferenceRepository.setSelectedModelId(selectedModelId)
+                _uiState.value = _uiState.value.copy(
+                    models = catalog.models,
+                    selectedModelId = selectedModelId,
+                    isLoadingModels = false,
+                )
+            } catch (exception: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingModels = false,
+                    modelError = exception.message ?: "Failed to load models",
+                )
+            }
+        }
+    }
+
+    fun selectModel(modelId: String) {
+        modelPreferenceRepository.setSelectedModelId(modelId)
+        _uiState.value = _uiState.value.copy(selectedModelId = modelId)
+    }
+
+    fun selectLocalModel(id: String) {
+        localModelRepository.selectModel(id)
+    }
+
+    fun setAppModelMode(mode: AppModelMode) {
+        modelPreferenceRepository.setAppModelMode(mode)
+    }
+
+    fun clearConversation() {
+        _uiState.value = _uiState.value.copy(
+            chatState = ChatState(
+                conversationId = null,
+                messages = emptyList(),
+                activeToolCalls = emptyList(),
+                currentContent = "",
+                isLoading = false,
+                error = null,
+            )
+        )
+        activeConversationId = null
+        activeServerConversationId = null
+        viewModelScope.launch {
+            ensureConversation()
+        }
+    }
+
+    fun startNewConversation() {
+        activeConversationId = null
+        activeServerConversationId = null
+        _uiState.value = _uiState.value.copy(
+            activeConversationId = null,
+            chatState = ChatState(
+                conversationId = null,
+                messages = emptyList(),
+                activeToolCalls = emptyList(),
+                currentContent = "",
+                isLoading = false,
+                error = null,
+            )
+        )
+        viewModelScope.launch {
+            ensureConversation()
+        }
+    }
+
+    fun switchConversation(id: String) {
+        activeConversationId = id
+        _uiState.value = _uiState.value.copy(
+            activeConversationId = id,
+            chatState = ChatState(
+                conversationId = null,
+                messages = emptyList(),
+                activeToolCalls = emptyList(),
+                currentContent = "",
+                isLoading = false,
+                error = null,
+            )
+        )
+        loadMessages(id)
+        viewModelScope.launch {
+            val summary = conversationStore.conversations.first().firstOrNull { it.id == id }
+            activeServerConversationId = summary?.serverConversationId
+            _uiState.value = _uiState.value.copy(
+                chatState = _uiState.value.chatState.copy(
+                    conversationId = summary?.serverConversationId
+                )
+            )
+        }
+    }
+
+    fun deleteConversation(id: String) {
+        viewModelScope.launch {
+            conversationStore.deleteConversation(id)
+            if (activeConversationId == id) {
+                activeConversationId = null
+                activeServerConversationId = null
+                _uiState.value = _uiState.value.copy(
+                    activeConversationId = null,
+                    chatState = ChatState(
+                        conversationId = null,
+                        messages = emptyList(),
+                        activeToolCalls = emptyList(),
+                        currentContent = "",
+                        isLoading = false,
+                        error = null,
+                    )
+                )
+                ensureConversation()
+            }
+        }
+    }
+
+    fun showDownloadDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showLocalModelDialog = show)
+    }
+
+    fun installLocalModel(url: String, sha256: String? = null, modelId: String = "gemma-3-1b-it") {
+        viewModelScope.launch {
+            localModelRepository.install(url, sha256, modelId)
+        }
+    }
+
+    fun installLocalModelSpec(spec: LocalModelSpec) {
+        viewModelScope.launch {
+            localModelRepository.install(spec.defaultUrl, spec.expectedSha256, spec.id)
+        }
+    }
+
+    fun deleteLocalModel(id: String) {
+        localModelRepository.deleteModel(id)
     }
 
     /** Re-fetch whether Google is connected. Call on deep-link return. */
@@ -69,24 +307,91 @@ class ChatViewModel @Inject constructor(
     }
 
     fun sendMessage(text: String) {
-        val client = apiClient ?: return
         val currentState = _uiState.value.chatState
 
-        val withUserMessage = currentState.copy(
-            messages = currentState.messages + ChatMessage(
+        // On-Device Mode
+        if (_uiState.value.appModelMode == AppModelMode.OnDevice) {
+            val localState = localModelRepository.state.value
+            if (localState !is LocalModelState.Ready) {
+                _uiState.value = _uiState.value.copy(
+                    chatState = currentState.copy(
+                        error = "Local model is not installed. Please download one from model settings.",
+                        isLoading = false,
+                    ),
+                    showLocalModelDialog = true
+                )
+                return
+            }
+
+            val userMsg = ChatMessage(
                 id = "user-${System.currentTimeMillis()}",
                 role = "user",
                 content = text,
-            ),
+            )
+            val withUserMessage = currentState.copy(
+                messages = currentState.messages + userMsg,
+                isLoading = true,
+                error = null,
+                currentContent = "",
+            )
+            _uiState.value = _uiState.value.copy(chatState = withUserMessage)
+
+            viewModelScope.launch {
+                val convoId = ensureConversation()
+                conversationStore.appendMessage(convoId, userMsg.id, "user", text)
+
+                var accumulated = ""
+                val result = llmInferenceService.generate(text) { partial ->
+                    accumulated += partial
+                    _uiState.value = _uiState.value.copy(
+                        chatState = _uiState.value.chatState.copy(currentContent = accumulated)
+                    )
+                }
+
+                val finalContent = accumulated.ifBlank { result }
+                val assistantMsg = ChatMessage(
+                    id = "local-${System.currentTimeMillis()}",
+                    role = "assistant",
+                    content = finalContent,
+                )
+                val updatedMessages = _uiState.value.chatState.messages + assistantMsg
+                _uiState.value = _uiState.value.copy(
+                    chatState = _uiState.value.chatState.copy(
+                        messages = updatedMessages,
+                        currentContent = "",
+                        isLoading = false,
+                    )
+                )
+                conversationStore.appendMessage(convoId, assistantMsg.id, "assistant", finalContent)
+            }
+            return
+        }
+
+        // Backend Mode
+        val client = apiClient ?: return
+
+        val userMsg = ChatMessage(
+            id = "user-${System.currentTimeMillis()}",
+            role = "user",
+            content = text,
+        )
+        val withUserMessage = currentState.copy(
+            messages = currentState.messages + userMsg,
             isLoading = true,
             error = null,
         )
         _uiState.value = _uiState.value.copy(chatState = withUserMessage)
 
         viewModelScope.launch {
+            val convoId = ensureConversation()
+            conversationStore.appendMessage(convoId, userMsg.id, "user", text)
             try {
                 val response = withContext(Dispatchers.IO) {
-                    client.streamChat(text, _uiState.value.chatState.conversationId)
+                    client.streamChat(
+                        message = text,
+                        conversationId = _uiState.value.chatState.conversationId,
+                        model = _uiState.value.selectedModelId,
+                    )
                 }
                 if (!response.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
@@ -108,6 +413,20 @@ class ChatViewModel @Inject constructor(
                     state = ChatReducer.reduce(state, event)
                     _uiState.value = _uiState.value.copy(chatState = state)
                 }
+
+                val serverConversationId = state.conversationId
+                if (serverConversationId != activeServerConversationId) {
+                    activeServerConversationId = serverConversationId
+                    conversationStore.setServerConversationId(convoId, serverConversationId)
+                    _uiState.value = _uiState.value.copy(
+                        chatState = _uiState.value.chatState.copy(conversationId = serverConversationId)
+                    )
+                }
+                state.messages
+                    .filter { it.id != userMsg.id && it.role != "user" }
+                    .forEach { msg ->
+                        conversationStore.appendMessage(convoId, msg.id, msg.role, msg.content)
+                    }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     chatState = _uiState.value.chatState.copy(

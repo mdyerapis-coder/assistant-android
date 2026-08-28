@@ -1,8 +1,10 @@
 package com.mdyerapis.assistant.backendclient
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,6 +16,21 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
     data class ChatRequest(
         val conversation_id: String? = null,
         val message: String,
+        val model: String? = null,
+    )
+
+    @Serializable
+    data class ModelOption(
+        val id: String,
+        val model: String,
+        val provider: String,
+        val description: String,
+    )
+
+    @Serializable
+    data class ModelsResponse(
+        val default_model_id: String? = null,
+        val models: List<ModelOption>,
     )
 
     /**
@@ -21,13 +38,38 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
      * The caller reads lines from the response body and feeds them to
      * [SseFrameCodec.parse].
      */
-    fun streamChat(message: String, conversationId: String? = null): okhttp3.Response {
-        val body = Json.encodeToString(ChatRequest(conversation_id = conversationId, message = message))
+    fun streamChat(
+        message: String,
+        conversationId: String? = null,
+        model: String? = null,
+    ): okhttp3.Response {
+        val body = Json.encodeToString(
+            ChatRequest(
+                conversation_id = conversationId,
+                message = message,
+                model = model,
+            )
+        )
         val request = Request.Builder()
             .url("$baseUrl/v1/chat")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         return client.newCall(request).execute()
+    }
+
+    fun listModels(): ModelsResponse {
+        val request = Request.Builder()
+            .url("$baseUrl/v1/models")
+            .get()
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Model catalog failed with HTTP ${response.code}")
+            }
+            val payload = response.body?.string()
+                ?: throw IOException("Model catalog response was empty")
+            Json.decodeFromString(payload)
+        }
     }
 
     /**

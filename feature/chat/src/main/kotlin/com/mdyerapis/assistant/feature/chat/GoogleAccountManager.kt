@@ -25,18 +25,18 @@ import javax.inject.Singleton
  * back via assistantapp://oauth-complete when the flow finishes.
  */
 @Singleton
-class GoogleAccountManager @Inject constructor(
+open class GoogleAccountManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val client: OkHttpClient,
 ) {
     @Volatile
     private var baseUrl: String = "https://assistant.llmclouds.au"
 
-    fun configureBaseUrl(url: String) {
+    open fun configureBaseUrl(url: String) {
         baseUrl = url.trimEnd('/')
     }
 
-    suspend fun status(): Boolean = withContext(Dispatchers.IO) {
+    open suspend fun status(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url("$baseUrl/oauth/google/status")

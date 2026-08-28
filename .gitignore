@@ -1,0 +1,53 @@
+# Android / Gradle
+.gradle/
+build/
+*/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.aar
+*.dex
+*.class
+
+# Binaries
+bin/
+gen/
+out/
+release/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.fleet/
+
+# Native libs (rebuilt per arch)
+*.so
+*.so.*
+
+# Logs / reports
+*.log
+*.hprof
+build/reports/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lint caches
+*.lint-cache/
+
+# Secrets
+*.env
+!.env.example
+keystore.properties
+*.jks
+*.keystore
+google-services.json
+service-account.json

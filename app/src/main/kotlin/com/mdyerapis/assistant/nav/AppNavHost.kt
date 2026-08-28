@@ -13,16 +13,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mdyerapis.assistant.core.security.BearerTokenRepository
 import com.mdyerapis.assistant.feature.chat.ChatScreen
+import com.mdyerapis.assistant.feature.chat.SessionsScreen
+import com.mdyerapis.assistant.feature.chat.SettingsScreen
 import com.mdyerapis.assistant.feature.onboarding.OnboardingScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
-/**
- * Root nav graph. Decides initial destination based on whether a bearer
- * token is already persisted in the Android Keystore — the assistant
- * only shows the onboarding screen on first launch (or after the user
- * explicitly clears app data), never again.
- */
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
@@ -45,7 +41,21 @@ fun AppNavHost() {
             })
         }
         composable("chat") {
-            ChatScreen()
+            ChatScreen(
+                onNavigateSettings = { navController.navigate("settings") },
+                onNavigateSessions = { navController.navigate("sessions") }
+            )
+        }
+        composable("sessions") {
+            SessionsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenConversation = { navController.popBackStack() }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }

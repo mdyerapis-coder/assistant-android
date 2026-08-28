@@ -33,7 +33,7 @@ dependencies {
     implementation(project(":backend-client"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:chat"))
-
+    implementation(project(":feature:localmodel"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)

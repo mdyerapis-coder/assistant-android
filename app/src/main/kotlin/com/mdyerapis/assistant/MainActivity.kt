@@ -5,12 +5,14 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.mdyerapis.assistant.core.designsystem.theme.AssistantTheme
 import com.mdyerapis.assistant.feature.chat.GoogleAccountManager
+import com.mdyerapis.assistant.feature.chat.GoogleOAuthCompletionNotifier
 import com.mdyerapis.assistant.nav.AppNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -19,10 +21,11 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var googleAccountManager: GoogleAccountManager
+    lateinit var googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         handleOAuthDeepLink(intent)
         setContent {
             AssistantTheme {
@@ -50,8 +53,7 @@ class MainActivity : ComponentActivity() {
     private fun handleOAuthDeepLink(intent: Intent?) {
         val data: Uri = intent?.data ?: return
         if (data.toString() != GoogleAccountManager.OAUTH_COMPLETE_URI) return
-        // Trigger a status refresh on the next frame; the ChatScreen's
-        // LaunchedEffect also calls this on first composition.
+        googleOAuthCompletionNotifier.notifyCompletion()
         intent.action = null
         intent.data = null
     }
