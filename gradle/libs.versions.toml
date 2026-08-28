@@ -16,6 +16,7 @@ room = "2.7.2"
 coreKtx = "1.15.0"
 firebaseBom = "33.7.0"
 playServicesAuth = "21.3.0"
+browserCustomTabs = "1.8.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -52,6 +53,7 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
+androidx-browser-customtabs = { module = "androidx.browser:browser", version.ref = "browserCustomTabs" }
 
 junit = { module = "junit:junit", version = "4.13.2" }
 
