@@ -199,7 +199,7 @@ fun ChatScreen(
                                 )
                             }
 
-                            // Quick Prompt Suggestion Chips
+                            // Quick Prompt Suggestion Chips — horizontally scrollable, never clips; primary CTA prominent, secondary muted
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -221,12 +221,26 @@ fun ChatScreen(
                                     )
                                 }
 
-                                suggestions.forEach { (label, prompt) ->
+                                suggestions.forEachIndexed { index, (label, prompt) ->
+                                    val isPrimary = index == 0
                                     SuggestionChip(
                                         onClick = {
                                             viewModel.sendMessage(prompt)
                                         },
-                                        label = { Text(label) }
+                                        label = { Text(label) },
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        shape = MaterialTheme.shapes.medium,
+                                        colors = if (isPrimary) {
+                                            SuggestionChipDefaults.suggestionChipColors(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        } else {
+                                            SuggestionChipDefaults.suggestionChipColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
                                     )
                                 }
                             }
