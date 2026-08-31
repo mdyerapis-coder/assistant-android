@@ -16,11 +16,12 @@ import javax.inject.Singleton
 object FcmModule {
 
     /**
-     * Hardcoded for now — the backend URL should be configurable
-     * (e.g. via a build config field or Settings). Matches the
-     * production assistant.llmclouds.au endpoint.
+     * Production fallback used only when onboarding has not configured a
+     * server yet (no saved baseUrl). Device-token registration and SMS
+     * relay must target the server the user onboarded with, so the
+     * persisted baseUrl wins when present.
      */
-    private const val BACKEND_BASE_URL = "https://assistant.llmclouds.au"
+    private const val DEFAULT_BACKEND_BASE_URL = "https://assistant.llmclouds.au"
 
     @Provides
     @Singleton
@@ -33,6 +34,13 @@ object FcmModule {
 
     @Provides
     @Singleton
-    fun provideDeviceTokenApi(client: OkHttpClient): DeviceTokenApi =
-        DeviceTokenApi(client, BACKEND_BASE_URL)
+    fun provideDeviceTokenApi(
+        client: OkHttpClient,
+        tokenRepository: BearerTokenRepository,
+    ): DeviceTokenApi {
+        val baseUrl = tokenRepository.getBaseUrl()
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_BACKEND_BASE_URL
+        return DeviceTokenApi(client, baseUrl)
+    }
 }
