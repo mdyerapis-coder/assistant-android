@@ -48,6 +48,7 @@ fun AppNavHost() {
         }
         composable("sessions") {
             SessionsScreen(
+                viewModel = hiltViewModel(navController.getBackStackEntry("chat")),
                 onNavigateBack = { navController.popBackStack() },
                 onOpenConversation = { navController.popBackStack() }
             )
