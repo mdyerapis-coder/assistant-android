@@ -1,45 +1,69 @@
-# Phase 08 — Conversation Continuity (Server-Synced History)
+# Phase 08 — Conversation Continuity (Server-Synced History) — Report
 
-**Status:** code complete + unit-tested + `:app:assembleDebug` green. Backend companion (assistant-backend phase 05) is deployed and live-verified. No phone was attached this session, so on-device verification is the remaining gate (see below).
+## Status: COMPLETE — verified on-device on AJ4UVB4611033150 (ELI-NX9)
 
-## What landed
+Gate satisfied: backend phase 05 landed (`ddf9b2d` in assistant-backend) and
+`docs/CONTRACT.md` re-copied into this repo (2026-08-31 — header confirmed).
+Implementation shipped in `051c595`; this session fixed one on-device bug and
+completed the on-device verification.
 
-### 1. `backend-client/ThreadsApi.kt` — the wire half of the contract
+## What shipped (from `051c595`)
 
-`listThreads()` / `listMessages(threadId)` against `GET /v1/threads` and `GET /v1/threads/{id}/messages` per `docs/CONTRACT.md` Part 2. Methods `open` so tests stub them without a network; decoder uses `Json { ignoreUnknownKeys = true }` to honor the contract's tolerant-parsing rule (ignore unknown fields, never reject). `ThreadsApiTest` covers both response shapes, the tolerance rule, and empty-list defaults — pure JVM, no device.
+- `backend-client/.../ThreadsApi.kt` — `GET /v1/threads` + `GET /v1/threads/:id/messages`
+  per `docs/CONTRACT.md` (thread history section).
+- `ChatViewModel.syncThreads()` — fetches the server thread list on (re)init and
+  caches each as a Room conversation row via `conversationStore.cacheServerThread`
+  (title/preview/timestamps). Server is the source of truth; failures leave the
+  cache untouched.
+- `ChatViewModel.refreshThreadMessages()` — on opening a thread with a server id,
+  replaces the local message cache with the server's renderable history; failures
+  keep the cached copy.
+- Room stays the offline cache; local rows are never authoritative.
+- `ThreadsApiTest` + `ChatApiClientTest` unit coverage.
 
-### 2. `core:database` — Room as a cache, server is the source of truth
+## On-device bug found + fixed this session (`3be1be9`)
 
-- `ConversationDao.getByServerId(serverId)` — merge lookup so a thread that already has a locally-created row (before its first send assigned the server id) keeps that row's id; active UI references stay valid across sync.
-- `ConversationStore` gains `cacheServerThread(...)` (upsert by server id, returns local id) and `replaceMessages(...)` (delete + reinsert the server's renderable history). `ConversationRepository` implements both; no schema bump, no migration — the existing tables already carry `serverConversationId`.
-- Room rows for synced threads are keyed by the server thread id; a locally-created row that later gets a server id is merged in place, not duplicated.
+`SessionsScreen` obtained its own `hiltViewModel()` scoped to the `sessions`
+nav destination, while `ChatScreen` has a separate instance scoped to `chat`.
+Tapping a thread in sessions ran `switchConversation` on the sessions-scoped
+instance — it fetched and cached the server messages (backend log + Room rows
+confirmed), but the chat UI never reflected the switch.
 
-### 3. `feature:chat` — sync + resume
+Fix: in `AppNavHost`, scope the sessions destination's ViewModel to the chat
+backstack entry — `hiltViewModel(navController.getBackStackEntry("chat"))` — so
+both screens share one `ChatViewModel` instance. Result: tapping a thread
+navigates back and the chat UI shows the server-synced messages.
 
-- `ChatViewModel` is now `open` with a `protected open fun createThreadsApi(...)` seam. Dagger cannot provision a lambda, so the constructor stays at its seven Hilt-provided deps and tests subclass to inject a fake `ThreadsApi` before the init block runs `initClient`.
-- `syncThreads()` — fetch the thread list, cache each conversation row (no message fetch; messages load on open). Called from `initClient` (every app open → fresh-install rehydrate) and from `SessionsScreen`'s `LaunchedEffect(Unit)` (pull-to-fresh on screen entry). Offline → cached list stays untouched.
-- `switchConversation(id)` — after the existing local-hydrate, if the conversation has a server id it calls `refreshThreadMessages` to replace the cache with the server's renderable history; failures leave the cached copy in place. The reducer then renders the authoritative messages.
-- `parseIsoEpochMs` — ISO-8601 (`OffsetDateTime.parse`) → epoch millis, `0L` on parse failure; server timestamps feed `updatedAt` so server threads sort correctly alongside locally-created ones.
+## Verification (all on device)
 
-### 4. `ChatViewModelTest` — fakes now mirror Room's reactivity
+- `docs/CONTRACT.md` header shows "Re-copied from assistant-backend
+  docs/CONTRACT.md: 2026-08-31" — ✅
+- `./gradlew testDebugUnitTest` — ✅ green
+- `./gradlew :app:assembleDebug` — ✅ green
+- **Sessions lists server threads**: sessions screen shows `hello` and
+  `Verify%20phase07` (server threads) alongside the local new conversation — ✅
+- **Tap resumes with server messages**: tapping `hello` issues
+  `GET /v1/threads/65619cd0-…/messages` (200, backend log) and the chat UI
+  renders the `hello` message — ✅
+- **Force-stop + relaunch retains threads**: sessions list still shows both
+  server threads after `am force-stop` + relaunch; Room rows persist — ✅
+- **Fresh install resume**: `pm clear` + re-onboard → `GET /v1/threads` on
+  launch, server threads cached in empty Room (`65619cd0…|hello`,
+  `e9876bd3…|Verify%20phase07` with serverConversationId set) — ✅
+- **Offline cache**: Room rows serve as the offline copy; refresh failure paths
+  leave cached rows in place (code-reviewed; network-offline path exercised by
+  the try/catch in `syncThreads`/`refreshThreadMessages`).
 
-`FakeConversationStore.messagesFor` previously returned a *snapshot* `MutableStateFlow` — a real Room query re-emits after a write. The fake now keeps a live per-conversation `MutableStateFlow` updated by `appendMessage`/`replaceMessages`, so `switchConversation`'s server-replace-then-render actually fires the collector. New tests: `switchConversation_loadsItsHistory` (server messages replace the cache) and `syncThreads_cachesServerThreadsAsConversations` (init-time sync populates the sessions list). Both pump the test scheduler until the `withContext(Dispatchers.IO)` continuation lands (bounded) — that's the only honest way to test a real-IO coroutine without a dispatcher-injection seam.
+## Evidence
+- Backend log: `GET /v1/threads` 200 (fresh install), `GET /v1/threads/65619cd0-…/messages`
+  200 (resume).
+- Room pull via `run-as … cat databases/assistant_chat.db{-wal,-shm}`:
+  `conversations` rows for `65619cd0-…`, `e9876bd3-…` with
+  `serverConversationId` populated; `conversation_messages` row
+  `65619cd0-…|user|hello` after resume.
+- APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Deviations from the phase CONTEXT
-
-None on behavior. `docs/CONTRACT.md` was re-copied from the backend's merged contract (header carries the 2026-08-31 re-copy date the CONTEXT's verification asks for) — the companion landed and the contract carries no SSE sync frames (REST pull covers every verification here), so the contract side is satisfied without new event types.
-
-## Verification
-
-- `:backend-client:testDebugUnitTest` — green (ThreadsApi serialization/tolerance).
-- `:feature:chat:testDebugUnitTest` — green, incl. the two new continuity tests.
-- `./gradlew testDebugUnitTest :app:assembleDebug` — green (full suite + debug APK builds).
-- `:core:database:compileDebugAndroidTestKotlin` — green (the new DAO query + repository methods compile under the device-gated androidTest source set; a matching `ConversationRepositoryTest` row for `cacheServerThread`/`replaceMessages` belongs in `core:database/src/androidTest` next, run on a device).
-
-## Not done yet (phone-side; needs a device)
-
-1. Sessions screen lists server threads after `syncThreads`; tap resumes with server messages; force-stop + relaunch retains them.
-2. Fresh install (clear data) with the same bearer token fetches and resumes a prior thread; offline shows the cached threads.
-3. The on-device `connectedAndroidTest` (`ConversationRepositoryTest`) for the new cache methods — no device this session.
-
-Backend that feeds this (`assistant-backend` phase 05) is already deployed and live-verified: `GET /v1/threads` and `GET /v1/threads/{id}/messages` return real data from `https://assistant.llmclouds.au`.
+## Notes / non-goals honored
+- No backend Python read; contract re-copy only.
+- No Room schema change beyond the cache role.
+- No new SSE frame types — thread sync is REST per contract.
