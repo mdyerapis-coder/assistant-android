@@ -10,9 +10,11 @@ import kotlinx.coroutines.flow.Flow
 interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<ConversationEntity>>
-
     @Query("SELECT * FROM conversations WHERE id = :id")
     suspend fun get(id: String): ConversationEntity?
+
+    @Query("SELECT * FROM conversations WHERE serverConversationId = :serverId LIMIT 1")
+    suspend fun getByServerId(serverId: String): ConversationEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(conversation: ConversationEntity)

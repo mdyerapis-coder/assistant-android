@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.mdyerapis.assistant.backendclient.ChatApiClient
 import com.mdyerapis.assistant.backendclient.ChatReducer
 import com.mdyerapis.assistant.backendclient.SseFrameCodec
+import com.mdyerapis.assistant.backendclient.ThreadsApi
 import com.mdyerapis.assistant.core.database.chat.ConversationStore
+import com.mdyerapis.assistant.core.database.chat.StoredMessage
 import com.mdyerapis.assistant.core.model.ChatMessage
 import com.mdyerapis.assistant.core.model.ChatState
 import com.mdyerapis.assistant.core.network.OkHttpClientFactory
@@ -22,10 +24,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltViewModel
-class ChatViewModel @Inject constructor(
+open class ChatViewModel @Inject constructor(
     private val tokenRepository: BearerTokenRepository,
     private val googleAccountManager: GoogleAccountManager,
     private val googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier,
@@ -45,6 +48,7 @@ class ChatViewModel @Inject constructor(
 
     private var activeConversationId: String? = null
     private var activeServerConversationId: String? = null
+    private var threadsApi: ThreadsApi? = null
 
     init {
         initClient(baseUrl)
@@ -136,8 +140,80 @@ class ChatViewModel @Inject constructor(
             }
             .build()
         apiClient = ChatApiClient(client, baseUrl)
+        threadsApi = createThreadsApi(client, baseUrl)
         refreshGoogleStatus()
         loadModels()
+        // Phase 08: hydrate server threads into the Room cache on every
+        // client (re)initialization — fresh installs resume from here.
+        syncThreads()
+    }
+
+    /**
+     * Test seam (phase 08): unit tests override this to substitute a fake
+     * [ThreadsApi] before [initClient] runs from the init block. Kept out
+     * of the constructor because Dagger can't provision a lambda.
+     */
+    protected open fun createThreadsApi(
+        client: OkHttpClient,
+        baseUrl: String,
+    ): ThreadsApi = ThreadsApi(client, baseUrl)
+
+    /**
+     * Fetches the server thread list and caches each as a conversation row
+     * (no message fetch — messages load on open, phase 08). Server is the
+     * source of truth; on failure the cached list stays untouched.
+     */
+    fun syncThreads() {
+        val api = threadsApi ?: return
+        viewModelScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) { api.listThreads() }
+                for (thread in response.threads) {
+                    conversationStore.cacheServerThread(
+                        serverConversationId = thread.id,
+                        title = thread.title,
+                        preview = thread.preview,
+                        createdAtMs = parseIsoEpochMs(thread.created_at),
+                        updatedAtMs = parseIsoEpochMs(thread.last_message_at),
+                    )
+                }
+            } catch (_: Exception) {
+                // Offline or backend unavailable — cached threads remain.
+            }
+        }
+    }
+
+    /**
+     * Replaces the local cache for a thread with the server's renderable
+     * history. Called when opening a conversation that has a server id;
+     * failures leave the cached copy in place.
+     */
+    private fun refreshThreadMessages(serverConversationId: String, localId: String) {
+        val api = threadsApi ?: return
+        viewModelScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    api.listMessages(serverConversationId)
+                }
+                val cached = response.messages.map { message ->
+                    StoredMessage(
+                        id = "$serverConversationId:${message.id}",
+                        conversationId = localId,
+                        role = message.role,
+                        content = message.content,
+                        toolCallId = null,
+                        toolName = null,
+                        toolArgsJson = null,
+                        toolResult = null,
+                        isError = false,
+                        createdAt = parseIsoEpochMs(message.created_at),
+                    )
+                }
+                conversationStore.replaceMessages(localId, cached)
+            } catch (_: Exception) {
+                // Offline — cached messages remain.
+            }
+        }
     }
 
     private fun loadModels() {
@@ -240,6 +316,9 @@ class ChatViewModel @Inject constructor(
                     conversationId = summary?.serverConversationId
                 )
             )
+            // Phase 08: resync this thread's messages from the server so
+            // resume shows authoritative history, not just the cache.
+            summary?.serverConversationId?.let { refreshThreadMessages(it, id) }
         }
     }
 
@@ -436,5 +515,11 @@ class ChatViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun parseIsoEpochMs(iso: String): Long = try {
+        java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+    } catch (_: Exception) {
+        0L
     }
 }

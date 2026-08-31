@@ -31,4 +31,24 @@ interface ConversationStore {
         toolResult: String? = null,
         isError: Boolean = false,
     )
+
+    /**
+     * Upsert a conversation cached from the server (phase 08: server is
+     * the source of truth). Merges by serverConversationId — keeps the
+     * existing local row's id if one is already linked to this server
+     * thread. Returns the local conversation id.
+     */
+    suspend fun cacheServerThread(
+        serverConversationId: String,
+        title: String,
+        preview: String,
+        createdAtMs: Long,
+        updatedAtMs: Long,
+    ): String
+
+    /**
+     * Replace a conversation's cached messages wholesale with the
+     * server's renderable history (phase 08).
+     */
+    suspend fun replaceMessages(conversationId: String, messages: List<StoredMessage>)
 }

@@ -146,4 +146,54 @@ class ConversationRepository(
     suspend fun conversationExists(id: String): Boolean = withContext(Dispatchers.IO) {
         conversationDao.get(id) != null
     }
+
+    override suspend fun cacheServerThread(
+        serverConversationId: String,
+        title: String,
+        preview: String,
+        createdAtMs: Long,
+        updatedAtMs: Long,
+    ): String = withContext(Dispatchers.IO) {
+        // Merge by serverConversationId so a thread that already has a
+        // locally-created row (created before its first send assigned the
+        // server id) keeps that row's id — active UI references stay valid.
+        val existing = conversationDao.getByServerId(serverConversationId)
+        val localId = existing?.id ?: serverConversationId
+        conversationDao.upsert(
+            ConversationEntity(
+                id = localId,
+                title = title,
+                preview = preview,
+                modelId = existing?.modelId,
+                mode = existing?.mode ?: "cloud",
+                serverConversationId = serverConversationId,
+                createdAt = existing?.createdAt ?: createdAtMs,
+                updatedAt = updatedAtMs,
+            )
+        )
+        localId
+    }
+
+    override suspend fun replaceMessages(
+        conversationId: String,
+        messages: List<StoredMessage>,
+    ) = withContext(Dispatchers.IO) {
+        messageDao.deleteForConversation(conversationId)
+        messages.forEach { stored ->
+            messageDao.upsert(
+                MessageEntity(
+                    id = stored.id,
+                    conversationId = stored.conversationId,
+                    role = stored.role,
+                    content = stored.content,
+                    toolCallId = stored.toolCallId,
+                    toolName = stored.toolName,
+                    toolArgsJson = stored.toolArgsJson,
+                    toolResult = stored.toolResult,
+                    isError = if (stored.isError) 1 else 0,
+                    createdAt = stored.createdAt,
+                )
+            )
+        }
+    }
 }

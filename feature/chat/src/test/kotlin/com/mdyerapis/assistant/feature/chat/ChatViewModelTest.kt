@@ -3,6 +3,7 @@ package com.mdyerapis.assistant.feature.chat
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import com.mdyerapis.assistant.backendclient.ThreadsApi
 import com.mdyerapis.assistant.core.database.chat.ConversationStore
 import com.mdyerapis.assistant.core.database.chat.ConversationSummary
 import com.mdyerapis.assistant.core.database.chat.StoredMessage
@@ -84,6 +85,9 @@ class ChatViewModelTest {
     private class FakeConversationStore : ConversationStore {
         private val _conversations = MutableStateFlow<List<ConversationSummary>>(emptyList())
         private val messages = mutableMapOf<String, MutableList<StoredMessage>>()
+        // Live per-conversation flows, mirroring Room's reactive query
+        // behavior — messagesFor must re-emit after replaceMessages.
+        private val messageFlows = mutableMapOf<String, MutableStateFlow<List<StoredMessage>>>()
         private var counter = 1
 
         override val conversations: Flow<List<ConversationSummary>> = _conversations
@@ -110,15 +114,18 @@ class ChatViewModelTest {
         override suspend fun deleteConversation(id: String) {
             _conversations.value = _conversations.value.filterNot { it.id == id }
             messages.remove(id)
+            messageFlows.remove(id)
         }
 
         override suspend fun clearAll() {
             _conversations.value = emptyList()
             messages.clear()
+            messageFlows.clear()
         }
 
+
         override fun messagesFor(conversationId: String): Flow<List<StoredMessage>> =
-            MutableStateFlow(messages[conversationId] ?: emptyList())
+            flowFor(conversationId)
 
         override suspend fun appendMessage(
             conversationId: String, messageId: String, role: String, content: String,
@@ -128,12 +135,61 @@ class ChatViewModelTest {
                 StoredMessage(messageId, conversationId, role, content,
                     toolCallId, toolName, toolArgsJson, toolResult, isError, System.currentTimeMillis())
             )
+            flowFor(conversationId).value = messages[conversationId]?.toList() ?: emptyList()
         }
 
         fun capturedMessages(conversationId: String): List<StoredMessage> =
             messages[conversationId] ?: emptyList()
 
         fun createdCount(): Int = _conversations.value.size
+
+        fun summaries(): List<ConversationSummary> = _conversations.value
+
+        override suspend fun cacheServerThread(
+            serverConversationId: String,
+            title: String,
+            preview: String,
+            createdAtMs: Long,
+            updatedAtMs: Long,
+        ): String {
+            val existing = _conversations.value.firstOrNull {
+                it.serverConversationId == serverConversationId
+            }
+            val id = existing?.id ?: serverConversationId
+            _conversations.value = _conversations.value.filterNot { it.id == id } + ConversationSummary(
+                id = id,
+                title = title,
+                preview = preview,
+                modelId = existing?.modelId,
+                mode = existing?.mode ?: "cloud",
+                serverConversationId = serverConversationId,
+                updatedAt = updatedAtMs,
+            )
+            messages.getOrPut(id) { mutableListOf() }
+            flowFor(id)
+            return id
+        }
+
+        override suspend fun replaceMessages(
+            conversationId: String,
+            newMessages: List<StoredMessage>,
+        ) {
+            messages[conversationId] = newMessages.toMutableList()
+            flowFor(conversationId).value = newMessages
+        }
+
+        private fun flowFor(conversationId: String): MutableStateFlow<List<StoredMessage>> =
+            messageFlows.getOrPut(conversationId) {
+                MutableStateFlow(messages[conversationId] ?: emptyList())
+            }
+    }
+    private class FakeThreadsApi(
+        private val threads: ThreadsApi.ThreadsResponse = ThreadsApi.ThreadsResponse(),
+        private val messagesByThread: Map<String, ThreadsApi.ThreadMessagesResponse> = emptyMap(),
+    ) : ThreadsApi(OkHttpClient(), "http://localhost:0") {
+        override fun listThreads(): ThreadsApi.ThreadsResponse = threads
+        override fun listMessages(threadId: String): ThreadsApi.ThreadMessagesResponse =
+            messagesByThread[threadId] ?: ThreadsApi.ThreadMessagesResponse(threadId)
     }
 
     @Before
@@ -162,7 +218,7 @@ class ChatViewModelTest {
         val inferenceService = object : LlmInferenceService(context, localRepo) {}
         val store = FakeConversationStore()
 
-        val viewModel = ChatViewModel(
+        val viewModel = object : ChatViewModel(
             tokenRepository = tokenRepo,
             googleAccountManager = googleManager,
             googleOAuthCompletionNotifier = notifier,
@@ -170,7 +226,10 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
-        )
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
 
         assertEquals(AppModelMode.Backend, viewModel.uiState.value.appModelMode)
 
@@ -201,7 +260,7 @@ class ChatViewModelTest {
         val inferenceService = object : LlmInferenceService(context, localRepo) {}
         val store = FakeConversationStore()
 
-        val viewModel = ChatViewModel(
+        val viewModel = object : ChatViewModel(
             tokenRepository = tokenRepo,
             googleAccountManager = googleManager,
             googleOAuthCompletionNotifier = notifier,
@@ -209,7 +268,10 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
-        )
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
 
         // Set some dummy state
         viewModel.setAppModelMode(AppModelMode.OnDevice)
@@ -238,7 +300,7 @@ class ChatViewModelTest {
         val inferenceService = object : LlmInferenceService(context, localRepo) {}
         val store = FakeConversationStore()
 
-        val viewModel = ChatViewModel(
+        val viewModel = object : ChatViewModel(
             tokenRepository = tokenRepo,
             googleAccountManager = googleManager,
             googleOAuthCompletionNotifier = notifier,
@@ -246,7 +308,10 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
-        )
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
         advanceUntilIdle()
 
         viewModel.setAppModelMode(AppModelMode.OnDevice)
@@ -274,7 +339,7 @@ class ChatViewModelTest {
         val inferenceService = object : LlmInferenceService(context, localRepo) {}
         val store = FakeConversationStore()
 
-        val viewModel = ChatViewModel(
+        val viewModel = object : ChatViewModel(
             tokenRepository = tokenRepo,
             googleAccountManager = googleManager,
             googleOAuthCompletionNotifier = notifier,
@@ -282,7 +347,10 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
-        )
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
         advanceUntilIdle()
 
         // Backend default mode.
@@ -309,6 +377,23 @@ class ChatViewModelTest {
         val localRepo = LocalModelRepository(context, OkHttpClient())
         val inferenceService = object : LlmInferenceService(context, localRepo) {}
         val store = FakeConversationStore()
+        val threadsApi = FakeThreadsApi(
+            messagesByThread = mapOf(
+                "server-1" to ThreadsApi.ThreadMessagesResponse(
+                    thread_id = "server-1",
+                    messages = listOf(
+                        ThreadsApi.ThreadMessage(
+                            id = 12, role = "user", content = "Server hello",
+                            created_at = "2026-08-31T10:00:00+00:00",
+                        ),
+                        ThreadsApi.ThreadMessage(
+                            id = 15, role = "assistant", content = "Server reply",
+                            created_at = "2026-08-31T10:00:02+00:00",
+                        ),
+                    ),
+                ),
+            ),
+        )
 
         // Pre-seed a conversation with a stored message.
         val convoId = store.createConversation(
@@ -324,7 +409,7 @@ class ChatViewModelTest {
             content = "Persisted hello",
         )
 
-        val viewModel = ChatViewModel(
+        val viewModel = object : ChatViewModel(
             tokenRepository = tokenRepo,
             googleAccountManager = googleManager,
             googleOAuthCompletionNotifier = notifier,
@@ -332,15 +417,97 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
-        )
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                threadsApi
+        }
         advanceUntilIdle()
 
         viewModel.switchConversation(convoId)
         advanceUntilIdle()
 
+        // The server fetch runs via withContext(Dispatchers.IO) on a real
+        // thread; pump the scheduler until the replacement lands.
+        awaitUntil {
+            viewModel.uiState.value.chatState.messages.map { it.content } ==
+                listOf("Server hello", "Server reply")
+        }
+
+        // Cached messages are replaced by the server's renderable history —
+        // the server is the source of truth (phase 08).
         val messages = viewModel.uiState.value.chatState.messages
-        assertEquals(1, messages.size)
-        assertEquals("Persisted hello", messages.first().content)
+        assertEquals(listOf("Server hello", "Server reply"), messages.map { it.content })
         assertEquals("server-1", viewModel.uiState.value.chatState.conversationId)
+    }
+
+    @Test
+    fun syncThreads_cachesServerThreadsAsConversations() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = "test_token"
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val notifier = GoogleOAuthCompletionNotifier()
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val inferenceService = object : LlmInferenceService(context, localRepo) {}
+        val store = FakeConversationStore()
+        val threadsApi = FakeThreadsApi(
+            threads = ThreadsApi.ThreadsResponse(
+                threads = listOf(
+                    ThreadsApi.ThreadSummary(
+                        id = "srv-9",
+                        title = "what's on my calendar today",
+                        preview = "You have nothing scheduled.",
+                        created_at = "2026-08-31T10:00:00+00:00",
+                        last_message_at = "2026-08-31T10:00:02+00:00",
+                        message_count = 3,
+                    ),
+                ),
+            ),
+        )
+
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = notifier,
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = inferenceService,
+            conversationStore = store,
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                threadsApi
+        }
+        advanceUntilIdle()
+
+        // initClient at construction time syncs threads — a fresh install
+        // with an empty cache sees the server's thread list (phase 08).
+        // Same real-IO pumping as above.
+        awaitUntil { store.summaries().any { it.serverConversationId == "srv-9" } }
+        val synced = store.summaries().firstOrNull { it.serverConversationId == "srv-9" }
+        assertNotNull(synced)
+        assertEquals("what's on my calendar today", synced!!.title)
+        assertEquals("You have nothing scheduled.", synced.preview)
+        assertTrue(viewModel.uiState.value.availableSessions.any { it.id == "srv-9" })
+    }
+
+    /**
+     * withContext(Dispatchers.IO) escapes the test scheduler; poll the
+     * condition while churning the scheduler so the IO continuation's
+     * resumption gets processed. Bounded so a real failure still fails.
+     */
+    private fun kotlinx.coroutines.test.TestScope.awaitUntil(
+        iterations: Int = 500,
+        condition: () -> Boolean,
+    ) {
+        repeat(iterations) {
+            if (condition()) return
+            testScheduler.runCurrent()
+            testScheduler.advanceTimeBy(10)
+        }
+        // Bounded: if the condition still doesn't hold, the caller's
+        // assert fails with a clear message.
     }
 }

@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,10 @@ fun SessionsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf<String?>(null) }
+
+    // Phase 08: server is the source of truth — refresh the thread list
+    // every time the sessions screen opens.
+    LaunchedEffect(Unit) { viewModel.syncThreads() }
 
     Scaffold(
         topBar = {
