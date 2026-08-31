@@ -27,7 +27,7 @@ fun AppNavHost() {
     var startDestination by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        startDestination = if (gateViewModel.hasToken()) "chat" else "onboarding"
+        startDestination = if (gateViewModel.hasToken()) "sessions" else "onboarding"
     }
 
     val resolved = startDestination ?: return

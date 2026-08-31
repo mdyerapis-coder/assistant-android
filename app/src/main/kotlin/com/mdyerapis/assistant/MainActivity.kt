@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.mdyerapis.assistant.core.designsystem.theme.AssistantTheme
+import com.mdyerapis.assistant.feature.chat.ExternalIntake
 import com.mdyerapis.assistant.feature.chat.GoogleAccountManager
 import com.mdyerapis.assistant.feature.chat.GoogleOAuthCompletionNotifier
 import com.mdyerapis.assistant.fcm.SmsPermissionRationaleDialog
@@ -26,11 +27,14 @@ class MainActivity : ComponentActivity() {
     lateinit var googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier
     @Inject
     lateinit var smsRelayController: SmsRelayController
+    @Inject
+    lateinit var externalIntake: ExternalIntake
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleOAuthDeepLink(intent)
+        handleShareAndDeepLink(intent)
         setContent {
             AssistantTheme {
                 Surface(
@@ -53,6 +57,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleOAuthDeepLink(intent)
+        handleShareAndDeepLink(intent)
     }
 
     /**
@@ -67,5 +72,27 @@ class MainActivity : ComponentActivity() {
         googleOAuthCompletionNotifier.notifyCompletion()
         intent.action = null
         intent.data = null
+    }
+
+    /**
+     * Share-sheet intake (ACTION_SEND) and deep links
+     * (assistant://session/{id}). Both are queued on [externalIntake]
+     * and consumed by the chat screen.
+     */
+    private fun handleShareAndDeepLink(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND) {
+            val shared = intent.getStringExtra(Intent.EXTRA_TEXT)
+            if (!shared.isNullOrBlank()) {
+                externalIntake.offerSharedText(shared)
+            }
+            intent.action = null
+        }
+        val data: Uri = intent?.data ?: return
+        if (data.scheme == "assistant" && data.host == "session") {
+            data.pathSegments.firstOrNull()?.let { id ->
+                externalIntake.offerOpenConversation(id)
+            }
+            intent.data = null
+        }
     }
 }

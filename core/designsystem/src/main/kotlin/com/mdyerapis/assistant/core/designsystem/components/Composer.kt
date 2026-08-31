@@ -70,9 +70,9 @@ fun Composer(
                 },
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                    disabledIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
                 ),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -93,16 +93,8 @@ fun Composer(
                     enabled = enabled,
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = if (isListening) {
-                            MaterialTheme.colorScheme.errorContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        contentColor = if (isListening) {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
                     modifier = Modifier
                         .size(48.dp)

@@ -36,6 +36,7 @@ open class ChatViewModel @Inject constructor(
     private val localModelRepository: LocalModelRepository,
     private val llmInferenceService: LlmInferenceService,
     private val conversationStore: ConversationStore,
+    private val externalIntake: ExternalIntake,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -53,6 +54,16 @@ open class ChatViewModel @Inject constructor(
     init {
         val saved = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() }
         initClient(saved ?: baseUrl)
+        viewModelScope.launch {
+            externalIntake.events.collect { event ->
+                when (event) {
+                    is ExternalIntake.IntakeEvent.SharedText ->
+                        _uiState.value = _uiState.value.copy(pendingComposerText = event.text)
+                    is ExternalIntake.IntakeEvent.OpenConversation ->
+                        switchConversation(event.localConversationId)
+                }
+            }
+        }
         viewModelScope.launch {
             googleOAuthCompletionNotifier.completionVersion.drop(1).collect {
                 refreshGoogleStatus()
@@ -276,6 +287,20 @@ open class ChatViewModel @Inject constructor(
         }
     }
 
+    fun consumePendingComposerText() {
+        _uiState.value = _uiState.value.copy(pendingComposerText = null)
+    }
+
+    fun clearServerUnreachable() {
+        _uiState.value = _uiState.value.copy(serverUnreachable = false)
+    }
+
+    fun reconfigureServer() {
+        tokenRepository.clearToken()
+        tokenRepository.clearBaseUrl()
+        _uiState.value = _uiState.value.copy(serverUnreachable = false)
+    }
+
     fun toggleTts() {
         _uiState.value = _uiState.value.copy(ttsEnabled = !_uiState.value.ttsEnabled)
     }
@@ -482,11 +507,13 @@ open class ChatViewModel @Inject constructor(
                     )
                 }
                 if (!response.isSuccessful) {
+                    val isAuthOrServer = response.code in 401..503
                     _uiState.value = _uiState.value.copy(
                         chatState = _uiState.value.chatState.copy(
                             error = "Server error: ${response.code}",
                             isLoading = false,
-                        )
+                        ),
+                        serverUnreachable = isAuthOrServer,
                     )
                     return@launch
                 }
@@ -520,7 +547,8 @@ open class ChatViewModel @Inject constructor(
                     chatState = _uiState.value.chatState.copy(
                         error = "Connection error: ${e.message}",
                         isLoading = false,
-                    )
+                    ),
+                    serverUnreachable = true,
                 )
             }
         }

@@ -109,6 +109,12 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(uiState.pendingComposerText) {
+        val pending = uiState.pendingComposerText ?: return@LaunchedEffect
+        inputText = pending
+        viewModel.consumePendingComposerText()
+    }
+
     if (uiState.showLocalModelDialog) {
         LocalModelDownloadDialog(
             specs = uiState.availableLocalSpecs,
@@ -235,6 +241,37 @@ fun ChatScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            if (uiState.serverUnreachable) {
+                androidx.compose.material3.Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        androidx.compose.material3.Text(
+                            text = "Can't reach your assistant server. Check your connection or re-configure the server URL.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.padding(top = 8.dp),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                        ) {
+                            androidx.compose.material3.TextButton(onClick = { viewModel.clearServerUnreachable() }) {
+                                androidx.compose.material3.Text("Retry")
+                            }
+                            androidx.compose.material3.TextButton(onClick = { viewModel.reconfigureServer() }) {
+                                androidx.compose.material3.Text("Re-configure")
+                            }
+                        }
+                    }
+                }
+            }
             // Messages stream list
             LazyColumn(
                 state = listState,

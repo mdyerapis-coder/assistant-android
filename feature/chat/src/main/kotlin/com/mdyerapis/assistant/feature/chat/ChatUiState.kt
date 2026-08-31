@@ -24,4 +24,6 @@ data class ChatUiState(
     val localDownloadState: LocalModelDownloadState = LocalModelDownloadState.Idle,
     val showLocalModelDialog: Boolean = false,
     val ttsEnabled: Boolean = false,
+    val pendingComposerText: String? = null,
+    val serverUnreachable: Boolean = false,
 )
