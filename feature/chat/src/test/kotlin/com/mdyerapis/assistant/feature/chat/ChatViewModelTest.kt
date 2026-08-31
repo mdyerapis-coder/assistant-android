@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import com.mdyerapis.assistant.backendclient.ThreadsApi
 import com.mdyerapis.assistant.core.database.chat.ConversationStore
+import com.mdyerapis.assistant.feature.chat.ExternalIntake
 import com.mdyerapis.assistant.core.database.chat.ConversationSummary
 import com.mdyerapis.assistant.core.database.chat.StoredMessage
 import com.mdyerapis.assistant.core.security.BearerTokenRepository
@@ -226,6 +227,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
@@ -268,6 +270,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
@@ -308,6 +311,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
@@ -347,6 +351,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
@@ -417,6 +422,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 threadsApi
@@ -476,6 +482,7 @@ class ChatViewModelTest {
             localModelRepository = localRepo,
             llmInferenceService = inferenceService,
             conversationStore = store,
+            externalIntake = ExternalIntake(),
         ) {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 threadsApi
