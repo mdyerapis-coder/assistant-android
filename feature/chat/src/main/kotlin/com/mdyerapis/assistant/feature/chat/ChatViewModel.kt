@@ -51,7 +51,8 @@ open class ChatViewModel @Inject constructor(
     private var threadsApi: ThreadsApi? = null
 
     init {
-        initClient(baseUrl)
+        val saved = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() }
+        initClient(saved ?: baseUrl)
         viewModelScope.launch {
             googleOAuthCompletionNotifier.completionVersion.drop(1).collect {
                 refreshGoogleStatus()

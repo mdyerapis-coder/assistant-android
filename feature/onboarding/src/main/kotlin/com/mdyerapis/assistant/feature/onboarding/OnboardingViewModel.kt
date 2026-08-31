@@ -62,6 +62,7 @@ class OnboardingViewModel @Inject constructor(
                 val healthy = withContext(Dispatchers.IO) { api.checkHealth() }
                 if (healthy) {
                     tokenRepository.saveToken(state.token)
+                    tokenRepository.saveBaseUrl(state.baseUrl)
                     // Register the FCM device token with the backend now
                     // that we have a valid bearer token.
                     deviceTokenRegistrar.registerCurrentToken()
