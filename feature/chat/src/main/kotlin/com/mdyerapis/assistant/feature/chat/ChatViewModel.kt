@@ -276,7 +276,15 @@ open class ChatViewModel @Inject constructor(
         }
     }
 
+    fun toggleTts() {
+        _uiState.value = _uiState.value.copy(ttsEnabled = !_uiState.value.ttsEnabled)
+    }
+
+
     fun startNewConversation() {
+        activeConversationId = null
+        activeServerConversationId = null
+
         activeConversationId = null
         activeServerConversationId = null
         _uiState.value = _uiState.value.copy(

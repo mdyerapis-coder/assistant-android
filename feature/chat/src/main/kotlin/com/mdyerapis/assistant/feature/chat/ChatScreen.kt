@@ -1,6 +1,14 @@
 package com.mdyerapis.assistant.feature.chat
 
 import android.widget.Toast
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -48,6 +56,46 @@ fun ChatScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var showClearDialog by remember { mutableStateOf(false) }
+    val voiceController = remember { VoiceController(context) }
+    DisposableEffect(Unit) {
+        onDispose { voiceController.destroy() }
+    }
+
+    // Keep the VM's TTS flag in sync with the controller.
+    LaunchedEffect(uiState.ttsEnabled) {
+        voiceController.updateTtsEnabled(uiState.ttsEnabled)
+    }
+
+    // Speak a completed assistant message when TTS is on (both model modes).
+    LaunchedEffect(uiState.chatState.messages.size) {
+        val last = uiState.chatState.messages.lastOrNull()
+        if (last != null && last.role == "assistant" && last.content.isNotBlank()) {
+            voiceController.speak(last.content)
+        }
+    }
+
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            voiceController.startListening { recognized ->
+                inputText = recognized
+            }
+        }
+    }
+
+    fun startVoiceInput() {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            voiceController.startListening { recognized ->
+                inputText = recognized
+            }
+        } else {
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.refreshGoogleStatus()
@@ -137,6 +185,20 @@ fun ChatScreen(
                             contentDescription = "Settings"
                         )
                     }
+                    IconButton(onClick = { viewModel.toggleTts() }) {
+                        Icon(
+                            imageVector = if (uiState.ttsEnabled) {
+                                Icons.Filled.VolumeUp
+                            } else {
+                                Icons.Filled.VolumeOff
+                            },
+                            contentDescription = if (uiState.ttsEnabled) {
+                                "Mute spoken replies"
+                            } else {
+                                "Enable spoken replies"
+                            },
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -155,7 +217,15 @@ fun ChatScreen(
                 },
                 enabled = !uiState.chatState.isLoading,
                 placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) "Message local model..." else "Ask assistant...",
-                modifier = Modifier.imePadding()
+                modifier = Modifier.imePadding(),
+                isListening = voiceController.isListening,
+                onMicClick = {
+                    if (voiceController.isListening) {
+                        voiceController.stopListening()
+                    } else {
+                        startVoiceInput()
+                    }
+                },
             )
         }
     ) { innerPadding ->

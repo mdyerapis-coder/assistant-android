@@ -12,6 +12,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -21,9 +23,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
@@ -35,6 +41,8 @@ fun Composer(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     placeholder: String = "Type a message...",
+    isListening: Boolean = false,
+    onMicClick: (() -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -73,6 +81,45 @@ fun Composer(
             )
 
             val canSend = value.isNotBlank() && enabled
+            if (onMicClick != null) {
+                val pulse by animateFloatAsState(
+                    targetValue = if (isListening) 1f else 0f,
+                    animationSpec = tween(700),
+                    label = "micPulse",
+                )
+                val scale = if (isListening) 1f + 0.15f * pulse else 1f
+                FilledIconButton(
+                    onClick = onMicClick,
+                    enabled = enabled,
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = if (isListening) {
+                            MaterialTheme.colorScheme.errorContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = if (isListening) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    ),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .graphicsLayer { scaleX = scale; scaleY = scale },
+                ) {
+                    Icon(
+                        imageVector = if (isListening) {
+                            Icons.Filled.Stop
+                        } else {
+                            Icons.Filled.Mic
+                        },
+                        contentDescription = if (isListening) "Stop listening" else "Start voice input",
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
             FilledIconButton(
                 onClick = onSend,
                 enabled = canSend,

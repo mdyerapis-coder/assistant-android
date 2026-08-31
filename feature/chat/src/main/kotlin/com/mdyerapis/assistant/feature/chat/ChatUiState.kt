@@ -23,4 +23,5 @@ data class ChatUiState(
     val availableLocalSpecs: List<LocalModelSpec> = emptyList(),
     val localDownloadState: LocalModelDownloadState = LocalModelDownloadState.Idle,
     val showLocalModelDialog: Boolean = false,
+    val ttsEnabled: Boolean = false,
 )
