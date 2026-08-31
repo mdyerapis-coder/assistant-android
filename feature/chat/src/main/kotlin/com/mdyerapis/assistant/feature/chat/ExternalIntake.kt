@@ -1,5 +1,6 @@
 package com.mdyerapis.assistant.feature.chat
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -15,7 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class ExternalIntake @Inject constructor() {
 
-    private val _events = MutableSharedFlow<IntakeEvent>(extraBufferCapacity = 1)
+    private val _events = MutableSharedFlow<IntakeEvent>(replay = 1, extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
     val events: SharedFlow<IntakeEvent> = _events.asSharedFlow()
 
     /** Queue shared text (ACTION_SEND) to prefill the composer. */
