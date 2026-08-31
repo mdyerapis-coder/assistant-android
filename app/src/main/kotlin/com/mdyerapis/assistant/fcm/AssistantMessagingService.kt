@@ -21,6 +21,8 @@ class AssistantMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var deviceTokenRegistrar: DeviceTokenRegistrar
+    @Inject
+    lateinit var smsRelayController: SmsRelayController
 
     override fun onNewToken(token: String) {
         Log.i(TAG, "New FCM token: ${token.take(10)}...")
@@ -29,6 +31,14 @@ class AssistantMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         Log.i(TAG, "FCM message received: ${message.messageId}")
+        val action = message.data["action"]
+        if (action == SmsRelayController.ACTION_SEND ||
+            action == SmsRelayController.ACTION_READ
+        ) {
+            // Phase 10: SMS relay — the phone executes and reports back.
+            smsRelayController.handle(action, message.data)
+            return
+        }
         val title = message.notification?.title ?: message.data["title"] ?: "Reminder"
         val body = message.notification?.body ?: message.data["body"] ?: ""
         showNotification(title, body)

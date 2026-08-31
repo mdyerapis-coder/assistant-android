@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import com.mdyerapis.assistant.core.designsystem.theme.AssistantTheme
 import com.mdyerapis.assistant.feature.chat.GoogleAccountManager
 import com.mdyerapis.assistant.feature.chat.GoogleOAuthCompletionNotifier
+import com.mdyerapis.assistant.fcm.SmsPermissionRationaleDialog
+import com.mdyerapis.assistant.fcm.SmsRelayController
 import com.mdyerapis.assistant.nav.AppNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -22,6 +24,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier
+    @Inject
+    lateinit var smsRelayController: SmsRelayController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +38,13 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     AppNavHost()
+                    SmsPermissionRationaleDialog(
+                        visible = intent?.getBooleanExtra(
+                            SmsRelayController.EXTRA_SMS_PERMISSION, false
+                        ) ?: false,
+                        onDismiss = { intent?.removeExtra(SmsRelayController.EXTRA_SMS_PERMISSION) },
+                        onGranted = { smsRelayController.retryPending() },
+                    )
                 }
             }
         }
