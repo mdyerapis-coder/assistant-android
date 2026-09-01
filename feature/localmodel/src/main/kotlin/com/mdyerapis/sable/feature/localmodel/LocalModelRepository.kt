@@ -236,4 +236,52 @@ open class LocalModelRepository @Inject constructor(
         }
         checkInstalledState()
     }
+
+    /**
+     * Refresh available models from Hugging Face API, merged with bundled specs.
+     * Filters by device RAM — only shows models that fit.
+     */
+    suspend fun refreshAvailableModels(): List<LocalModelSpec> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val hfModels = fetchHfModels()
+                val allModels = availableSpecs + hfModels
+                val deviceRam = getDeviceRamBytes()
+                allModels.filter { it.sizeLabel.toLongOrNull()?.let { size -> size <= deviceRam } ?: true }
+            } catch (e: Exception) {
+                availableSpecs
+            }
+        }
+    }
+
+    private fun getDeviceRamBytes(): Long {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memInfo = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        return memInfo.totalMem
+    }
+
+    private suspend fun fetchHfModels(): List<LocalModelSpec> {
+        val request = Request.Builder()
+            .url("https://huggingface.co/api/models?filter=gguf&sort=downloads&limit=20")
+            .build()
+        val response = downloadClient.newCall(request).execute()
+        if (!response.isSuccessful) return emptyList()
+        val body = response.body?.string() ?: return emptyList()
+        // Simple JSON parse — extract model id, downloads, tags
+        return body.split("\"id\":\"").drop(1).mapNotNull { chunk ->
+            val id = chunk.substringBefore("\"")
+            val name = id.substringAfter("/").replace("-", " ").replace("_", " ")
+                .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            LocalModelSpec(
+                id = "hf-$id",
+                name = name,
+                description = "From Hugging Face: $id",
+                defaultUrl = "https://huggingface.co/$id",
+                sizeLabel = "Unknown",
+                isUncensored = false,
+                category = "HF",
+            )
+        }
+    }
 }
