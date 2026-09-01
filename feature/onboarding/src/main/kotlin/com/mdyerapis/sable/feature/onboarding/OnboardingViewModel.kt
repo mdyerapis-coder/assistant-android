@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class OnboardingUiState(
+    val currentFrame: Int = 0, // 0-3: story frames + connect form
     val token: String = "",
     val baseUrl: String = "",
     val isLoading: Boolean = false,
@@ -30,6 +31,17 @@ class OnboardingViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState
+
+    fun nextFrame() {
+        val current = _uiState.value.currentFrame
+        if (current < 3) {
+            _uiState.value = _uiState.value.copy(currentFrame = current + 1)
+        }
+    }
+
+    fun skipToConnect() {
+        _uiState.value = _uiState.value.copy(currentFrame = 3)
+    }
 
     fun updateToken(token: String) {
         _uiState.value = _uiState.value.copy(token = token, error = null)
@@ -63,8 +75,6 @@ class OnboardingViewModel @Inject constructor(
                 if (healthy) {
                     tokenRepository.saveToken(state.token)
                     tokenRepository.saveBaseUrl(state.baseUrl)
-                    // Register the FCM device token with the backend now
-                    // that we have a valid bearer token.
                     deviceTokenRegistrar.registerCurrentToken()
                     _uiState.value = _uiState.value.copy(isLoading = false, isDone = true)
                 } else {
