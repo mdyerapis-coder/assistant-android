@@ -33,6 +33,7 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,7 +67,7 @@ fun SessionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Conversations") },
+                title = { Text("Sable", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -84,6 +85,7 @@ fun SessionsScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
         }
     ) { innerPadding ->
         Column(
