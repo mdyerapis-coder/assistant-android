@@ -361,6 +361,81 @@ fun SettingsScreen(
             }
 
             // Section 3: Integrations
+            // Section: Cloud Providers
+            item {
+                Text(
+                    text = "CLOUD PROVIDERS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        listOf(
+                            Triple("OpenAI", true, "sk-...***"),
+                            Triple("Anthropic", false, "Not set"),
+                            Triple("Google", true, "Connected")
+                        ).forEach { (name, hasKey, status) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(if (hasKey) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline)
+                                    )
+                                    Text(name, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        TextButton(onClick = { /* TODO: add provider form */ }) {
+                            Text("Add provider")
+                        }
+                    }
+                }
+            }
+
+            // Section: Device Info
+            item {
+                Text(
+                    text = "DEVICE INFO",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                        val memInfo = android.app.ActivityManager.MemoryInfo()
+                        activityManager.getMemoryInfo(memInfo)
+                        val totalRamGb = memInfo.totalMem / (1024 * 1024 * 1024)
+                        val availRamGb = memInfo.availMem / (1024 * 1024 * 1024)
+                        val soc = android.os.Build.SOC_MODEL ?: "Unknown"
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("RAM", style = MaterialTheme.typography.bodyMedium)
+                            Text("${totalRamGb} GB (${availRamGb} GB free)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("SoC", style = MaterialTheme.typography.bodyMedium)
+                            Text(soc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             item {
                 Text(
                     text = "INTEGRATIONS",
@@ -422,7 +497,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Personal Assistant", style = MaterialTheme.typography.titleSmall)
+                        Text("Sable", style = MaterialTheme.typography.titleSmall)
                         Text("Version 0.2.0 (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Backend Server: https://sable.llmclouds.au", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
