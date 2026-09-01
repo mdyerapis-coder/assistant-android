@@ -41,6 +41,20 @@ class ModelPreferenceRepository @Inject constructor(
     fun setSelectedModelId(modelId: String?) {
         preferences.edit().apply {
             if (modelId == null) remove("selected_model_id") else putString("selected_model_id", modelId)
+            putString("recent_model_ids", updateRecentModels(getRecentModelIds(), modelId).joinToString(","))
         }.apply()
     }
+
+    /** Most-recently-used cloud model ids, newest first, capped — powers the chip quick-switch. */
+    fun getRecentModelIds(): List<String> =
+        preferences.getString("recent_model_ids", null)
+            ?.split(",")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+}
+
+/** Prepend [selectedId] to [current], deduplicated, capped at [cap]. Null selection is a no-op. */
+internal fun updateRecentModels(current: List<String>, selectedId: String?, cap: Int = 3): List<String> {
+    if (selectedId == null) return current
+    return (listOf(selectedId) + current.filter { it != selectedId }).take(cap)
 }

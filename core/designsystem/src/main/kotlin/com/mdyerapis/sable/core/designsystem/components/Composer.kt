@@ -30,6 +30,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
@@ -40,10 +42,14 @@ fun Composer(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** True while a reply streams: the send slot becomes a stop control. */
+    isStreaming: Boolean = false,
+    onStop: (() -> Unit)? = null,
     placeholder: String = "Type a message...",
     isListening: Boolean = false,
     onMicClick: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -77,7 +83,12 @@ fun Composer(
                 ),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { if (value.isNotBlank() && enabled) onSend() }),
+                keyboardActions = KeyboardActions(onSend = {
+                    if (value.isNotBlank() && enabled) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSend()
+                    }
+                }),
                 maxLines = 5,
             )
 
@@ -113,23 +124,47 @@ fun Composer(
                 }
             }
 
-            FilledIconButton(
-                onClick = onSend,
-                enabled = canSend,
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send message",
-                    modifier = Modifier.size(20.dp)
-                )
+            if (isStreaming && onStop != null) {
+                FilledIconButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onStop()
+                    },
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = "Stop generating",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                FilledIconButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSend()
+                    },
+                    enabled = canSend,
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send message",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

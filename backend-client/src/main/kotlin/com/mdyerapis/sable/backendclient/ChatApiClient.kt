@@ -17,6 +17,8 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
         val conversation_id: String? = null,
         val message: String,
         val model: String? = null,
+        /** IANA zone id; backend falls back to UTC when absent/invalid. */
+        val timezone: String? = null,
     )
 
     @Serializable
@@ -25,12 +27,30 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
         val model: String,
         val provider: String,
         val description: String,
+        /** Curated label from the backend; blank on older servers — derive client-side. */
+        val display_name: String = "",
+        /** Backend-owned filter categories; empty on older servers — use heuristic. */
+        val tags: List<String> = emptyList(),
     )
 
     @Serializable
     data class ModelsResponse(
         val default_model_id: String? = null,
         val models: List<ModelOption>,
+    )
+
+    @Serializable
+    data class ProviderStatus(
+        val name: String,
+        val default_model: String,
+        val note: String,
+        val configured: Boolean,
+        val selectable: Boolean,
+    )
+
+    @Serializable
+    data class ProvidersResponse(
+        val providers: List<ProviderStatus>,
     )
 
     /**
@@ -42,12 +62,14 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
         message: String,
         conversationId: String? = null,
         model: String? = null,
+        timezone: String? = java.util.TimeZone.getDefault().id,
     ): okhttp3.Response {
         val body = Json.encodeToString(
             ChatRequest(
                 conversation_id = conversationId,
                 message = message,
                 model = model,
+                timezone = timezone,
             )
         )
         val request = Request.Builder()
@@ -68,6 +90,22 @@ class ChatApiClient(private val client: OkHttpClient, private val baseUrl: Strin
             }
             val payload = response.body?.string()
                 ?: throw IOException("Model catalog response was empty")
+            Json.decodeFromString(payload)
+        }
+    }
+
+    /** Server-side provider registry with per-provider configuration status. */
+    fun listProviders(): ProvidersResponse {
+        val request = Request.Builder()
+            .url("$baseUrl/v1/providers")
+            .get()
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Provider status failed with HTTP ${response.code}")
+            }
+            val payload = response.body?.string()
+                ?: throw IOException("Provider status response was empty")
             Json.decodeFromString(payload)
         }
     }

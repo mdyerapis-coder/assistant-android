@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.setMain
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -187,8 +188,12 @@ class ChatViewModelTest {
     private class FakeThreadsApi(
         private val threads: ThreadsApi.ThreadsResponse = ThreadsApi.ThreadsResponse(),
         private val messagesByThread: Map<String, ThreadsApi.ThreadMessagesResponse> = emptyMap(),
+        private val fails: Boolean = false,
     ) : ThreadsApi(OkHttpClient(), "http://localhost:0") {
-        override fun listThreads(): ThreadsApi.ThreadsResponse = threads
+        override fun listThreads(): ThreadsApi.ThreadsResponse {
+            if (fails) throw java.io.IOException("offline")
+            return threads
+        }
         override fun listMessages(threadId: String): ThreadsApi.ThreadMessagesResponse =
             messagesByThread[threadId] ?: ThreadsApi.ThreadMessagesResponse(threadId)
     }
@@ -210,6 +215,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -236,12 +245,12 @@ class ChatViewModelTest {
         assertEquals(AppModelMode.Backend, viewModel.uiState.value.appModelMode)
 
         viewModel.setAppModelMode(AppModelMode.OnDevice)
-        advanceUntilIdle()
+        settle(viewModel)
         assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
 
         // Sending message while local model is NotInstalled triggers error and dialog
         viewModel.sendMessage("hello")
-        advanceUntilIdle()
+        settle(viewModel)
 
         assertTrue(viewModel.uiState.value.showLocalModelDialog)
         assertNotNull(viewModel.uiState.value.chatState.error)
@@ -253,6 +262,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -279,10 +292,10 @@ class ChatViewModelTest {
         // Set some dummy state
         viewModel.setAppModelMode(AppModelMode.OnDevice)
         viewModel.sendMessage("test")
-        advanceUntilIdle()
+        settle(viewModel)
 
         viewModel.clearConversation()
-        advanceUntilIdle()
+        settle(viewModel)
 
         assertTrue(viewModel.uiState.value.chatState.messages.isEmpty())
         assertEquals(null, viewModel.uiState.value.chatState.conversationId)
@@ -294,6 +307,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -316,13 +333,13 @@ class ChatViewModelTest {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
         }
-        advanceUntilIdle()
+        settle(viewModel)
 
         viewModel.setAppModelMode(AppModelMode.OnDevice)
-        advanceUntilIdle()
+        settle(viewModel)
 
         viewModel.sendMessage("hello")
-        advanceUntilIdle()
+        settle(viewModel)
 
         val sessions = viewModel.uiState.value.availableSessions
         assertEquals(1, sessions.size)
@@ -334,6 +351,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -356,11 +377,11 @@ class ChatViewModelTest {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 FakeThreadsApi()
         }
-        advanceUntilIdle()
+        settle(viewModel)
 
         // Backend default mode.
         viewModel.sendMessage("a backend question")
-        advanceUntilIdle()
+        settle(viewModel)
 
         // The user message must persist into the (fake) store even if the backend
         // stream fails (no server in test) — append happens before the network call.
@@ -374,6 +395,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -427,10 +452,10 @@ class ChatViewModelTest {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 threadsApi
         }
-        advanceUntilIdle()
+        settle(viewModel)
 
         viewModel.switchConversation(convoId)
-        advanceUntilIdle()
+        settle(viewModel)
 
         // The server fetch runs via withContext(Dispatchers.IO) on a real
         // thread; pump the scheduler until the replacement lands.
@@ -451,6 +476,10 @@ class ChatViewModelTest {
         val modelPrefs = ModelPreferenceRepository(context)
         val tokenRepo = object : BearerTokenRepository(context) {
             override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so IO work
+            // resolves inside a bounded settle() pump instead of leaking
+            // past the test scope (the historical fatal-coroutine flake).
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
         }
         val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
             override suspend fun status(): Boolean = false
@@ -487,7 +516,7 @@ class ChatViewModelTest {
             override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
                 threadsApi
         }
-        advanceUntilIdle()
+        settle(viewModel)
 
         // initClient at construction time syncs threads — a fresh install
         // with an empty cache sees the server's thread list (phase 08).
@@ -498,6 +527,167 @@ class ChatViewModelTest {
         assertEquals("what's on my calendar today", synced!!.title)
         assertEquals("You have nothing scheduled.", synced.preview)
         assertTrue(viewModel.uiState.value.availableSessions.any { it.id == "srv-9" })
+    }
+    @Test
+    fun sendWhileStreaming_queuesAndDrains() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so the IO
+            // failure path completes inside a bounded awaitUntil pump.
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val notifier = GoogleOAuthCompletionNotifier()
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val inferenceService = object : LlmInferenceService(context, localRepo) {}
+        val store = FakeConversationStore()
+
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = notifier,
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = inferenceService,
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+
+        viewModel.sendMessage("first")
+        // isLoading flips synchronously before the coroutine starts,
+        // so the second send must queue instead of firing concurrently.
+        assertTrue(
+            "first send must enter loading state synchronously (mode=%s)".format(
+                viewModel.uiState.value.appModelMode
+            ),
+            viewModel.uiState.value.chatState.isLoading,
+        )
+        viewModel.sendMessage("second")
+        assertEquals(listOf("second"), viewModel.uiState.value.pendingMessages)
+
+        // The failure path completes on Dispatchers.IO, outside the test
+        // scheduler — pump until the queue drains (same idiom as the
+        // thread-sync tests above).
+        awaitUntil { viewModel.uiState.value.pendingMessages.isEmpty() }
+        awaitUntil {
+            store.summaries().flatMap { store.capturedMessages(it.id) }
+                .count { it.role == "user" } >= 2
+        }
+        // Leave no in-flight IO behind: a dangling stream coroutine fails
+        // after this test's scope closes and corrupts the NEXT test.
+        awaitUntil {
+            !viewModel.uiState.value.chatState.isLoading &&
+                viewModel.uiState.value.pendingMessages.isEmpty()
+        }
+        val captured = store.summaries().flatMap { store.capturedMessages(it.id) }
+        assertTrue(captured.any { it.role == "user" && it.content == "first" })
+        assertTrue(
+            "captured=" + captured.joinToString { "${it.role}:${it.content}" } +
+                ", sessions=" + store.summaries().joinToString { it.id },
+            captured.any { it.role == "user" && it.content == "second" },
+        )
+    }
+
+    @Test
+    fun stopGenerating_cancelsStreamAndClearsQueue() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = "test_token"
+            // Fast-fail endpoint: instant connection refused, so the IO
+            // failure path completes inside a bounded awaitUntil pump.
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val notifier = GoogleOAuthCompletionNotifier()
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val inferenceService = object : LlmInferenceService(context, localRepo) {}
+        val store = FakeConversationStore()
+
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = notifier,
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = inferenceService,
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+
+        viewModel.sendMessage("first")
+        viewModel.sendMessage("second")
+        viewModel.stopGenerating()
+
+        assertTrue(viewModel.uiState.value.pendingMessages.isEmpty())
+        assertFalse(viewModel.uiState.value.chatState.isLoading)
+        // Cancelled stream leaves an in-flight IO continuation briefly;
+        // settle it before this test's scope closes.
+        awaitUntil { !viewModel.uiState.value.chatState.isLoading }
+        settle(viewModel)
+    }
+
+    @Test
+    fun syncThreadsFailure_marksSessionsOffline() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = "test_token"
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val notifier = GoogleOAuthCompletionNotifier()
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val inferenceService = object : LlmInferenceService(context, localRepo) {}
+        val store = FakeConversationStore()
+
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = notifier,
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = inferenceService,
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi(fails = true)
+        }
+
+        // initClient ran syncThreads at construction; the failed fetch must
+        // surface as sessionsOffline rather than a silent empty list.
+        awaitUntil { viewModel.uiState.value.sessionsOffline }
+        assertTrue(viewModel.uiState.value.sessionsOffline)
+        settle(viewModel)
+    }
+
+    /**
+     * Pump until the ViewModel has no in-flight work (model catalog, thread
+     * sync, chat streams, queues). Replaces advanceUntilIdle in this file:
+     * scheduler-only pumping misses real Dispatchers.IO continuations and
+     * those leak past teardown as fatal machinery crashes.
+     */
+    private fun kotlinx.coroutines.test.TestScope.settle(viewModel: ChatViewModel) {
+        awaitUntil {
+            !viewModel.uiState.value.isLoadingModels &&
+                !viewModel.uiState.value.chatState.isLoading &&
+                viewModel.uiState.value.pendingMessages.isEmpty()
+        }
+        testScheduler.runCurrent()
     }
 
     /**
@@ -513,6 +703,7 @@ class ChatViewModelTest {
             if (condition()) return
             testScheduler.runCurrent()
             testScheduler.advanceTimeBy(10)
+            Thread.sleep(1) // real-IO continuations (Dispatchers.IO) need wall time
         }
         // Bounded: if the condition still doesn't hold, the caller's
         // assert fails with a clear message.

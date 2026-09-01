@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,26 +24,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mdyerapis.sable.core.designsystem.theme.SableMonoFont
 import androidx.hilt.navigation.compose.hiltViewModel
-
-private fun formatModelDisplayName(modelId: String, rawModel: String): String {
-    return when {
-        modelId == "hermes-3-405b" || rawModel.contains("hermes-3", ignoreCase = true) -> "Hermes 3 (405B)"
-        modelId == "dolphin-uncensored" || rawModel.contains("dolphin", ignoreCase = true) -> "Dolphin 2.9 (Venice)"
-        modelId == "euryale-70b" || rawModel.contains("euryale", ignoreCase = true) -> "L3.3 Euryale (70B)"
-        modelId == "groq" || rawModel.contains("gpt-oss", ignoreCase = true) -> "GPT-OSS 120B (Groq)"
-        modelId == "openrouter" || rawModel.contains("claude", ignoreCase = true) -> "Claude 3.5 Sonnet"
-        modelId == "gemini" || rawModel.contains("gemini", ignoreCase = true) -> "Gemini 3.1 Pro"
-        modelId == "deepseek" || rawModel.contains("deepseek", ignoreCase = true) -> "DeepSeek V4 Pro"
-        modelId == "mistral" || rawModel.contains("mistral", ignoreCase = true) -> "Mistral Large 3"
-        modelId == "minimax" || rawModel.contains("minimax", ignoreCase = true) -> "MiniMax M3"
-        else -> {
-            val namePart = if (rawModel.contains("/")) rawModel.substringAfterLast("/") else rawModel
-            namePart.replace("-", " ").replace("_", " ")
-                .split(" ")
-                .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,7 +118,6 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    // Model Category Filter Chips
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -154,13 +135,31 @@ fun SettingsScreen(
 
                     Spacer(Modifier.height(8.dp))
 
-                    val filteredModels = uiState.models.filter { model ->
-                        when (selectedCategory) {
-                            "FAST" -> model.id in setOf("groq", "minimax") || model.description.contains("fast", ignoreCase = true)
-                            "REASONING" -> model.id in setOf("gemini", "deepseek", "mistral") || model.description.contains("reasoning", ignoreCase = true)
-                            "UNCENSORED" -> model.id in setOf("hermes-3-405b", "dolphin-uncensored", "euryale-70b") || model.description.contains("uncensored", ignoreCase = true)
-                            else -> true
-                        }
+                    var searchQuery by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search models...", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    val filteredModels = uiState.models
+                        .filter { matchesModelCategory(it, selectedCategory) }
+                        .filter { matchesModelQuery(it, searchQuery) }
+
+                    // Group by provider for collapsible per-provider menus
+                    val providerStatusMap = uiState.providerStatuses.associateBy { it.name }
+                    val grouped = filteredModels.groupBy { it.provider }
+                    // Keep expanded set in composition — survives recomposition, resets on screen exit
+                    var expandedProviders by remember { mutableStateOf(setOf<String>()) }
+                    // Auto-expand the group holding the active model once the catalog arrives
+                    // (and again when the user picks a model from a different provider).
+                    val selectedProvider = uiState.models.firstOrNull { it.id == uiState.selectedModelId }?.provider
+                    LaunchedEffect(selectedProvider) {
+                        if (selectedProvider != null) expandedProviders = expandedProviders + selectedProvider
                     }
 
                     Column(
@@ -171,127 +170,108 @@ fun SettingsScreen(
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Loading models catalog...", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
                             }
-                        } else if (filteredModels.isEmpty()) {
+                        } else if (uiState.modelError != null) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                ) {
+                                    Text(
+                                        "Couldn't load models: ${uiState.modelError}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = { viewModel.refreshModels() }) {
+                                        Text("Retry")
+                                    }
+                                }
+                            }
+                        } else if (grouped.isEmpty()) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("No models matching category.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
+                                Text("No models matching filters.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
                             }
                         } else {
-                            filteredModels.forEach { option ->
-                                val isSelected = option.id == uiState.selectedModelId
-                                val isUncensored = option.id in setOf("hermes-3-405b", "dolphin-uncensored", "euryale-70b") || option.description.contains("uncensored", ignoreCase = true)
-                                val isFast = option.id == "groq"
-                                val isReasoning = option.id in setOf("gemini", "deepseek", "mistral")
-
+                            grouped.entries.sortedBy { it.key }.forEach { (providerName, providerModels) ->
+                                val status = providerStatusMap[providerName]
+                                val isConfigured = status?.configured ?: true
+                                val isExpanded = providerName in expandedProviders
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface,
-                                    border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                                    tonalElevation = if (isSelected) 3.dp else 1.dp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable { viewModel.selectModel(option.id) }
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                    tonalElevation = 1.dp,
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        // Title Row + Checkmark
+                                    Column {
                                         Row(
-                                            modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    expandedProviders = if (isExpanded) expandedProviders - providerName
+                                                    else expandedProviders + providerName
+                                                }
+                                                .padding(14.dp)
                                         ) {
-                                            Text(
-                                                text = formatModelDisplayName(option.id, option.model),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isConfigured) ConfiguredGreen
+                                                        else MaterialTheme.colorScheme.outline
+                                                    )
                                             )
-                                            if (isSelected) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.CheckCircle,
-                                                    contentDescription = "Selected",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(22.dp)
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    providerName.replaceFirstChar { it.uppercase() },
+                                                    style = MaterialTheme.typography.titleSmall
+                                                )
+                                                Text(
+                                                    "${providerModels.size} model${if (providerModels.size == 1) "" else "s"}${if (!isConfigured) " · not configured" else ""}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
-                                        }
-
-                                        // Badges & Model ID Row
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            if (isUncensored) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = MaterialTheme.colorScheme.errorContainer
-                                                ) {
-                                                    Text(
-                                                        "UNCENSORED",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                            if (isFast) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = MaterialTheme.colorScheme.tertiaryContainer
-                                                ) {
-                                                    Text(
-                                                        "FAST",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                            if (isReasoning) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                                ) {
-                                                    Text(
-                                                        "REASONING",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            Text(
-                                                text = "${option.provider} · ${option.model}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f)
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp
+                                                else Icons.Filled.KeyboardArrowDown,
+                                                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
-
-                                        // Description
-                                        val cleanDesc = option.description.removePrefix("[Uncensored]").trim()
-                                        if (cleanDesc.isNotBlank()) {
-                                            Text(
-                                                text = cleanDesc,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(top = 2.dp)
-                                            )
+                                        if (isExpanded) {
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                            Column(
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.padding(12.dp)
+                                            ) {
+                                                providerModels.forEach { option ->
+                                                    ModelOptionCard(
+                                                        displayName = displayNameFor(option),
+                                                        rawModel = option.model,
+                                                        isSelected = option.id == uiState.selectedModelId,
+                                                        isEnabled = isConfigured,
+                                                        onClick = { viewModel.selectModel(option.id) },
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -361,11 +341,10 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 3: Integrations
-            // Section: Cloud Providers
+            // Section 3: Model providers
             item {
                 Text(
-                    text = "CLOUD PROVIDERS",
+                    text = "MODEL PROVIDERS",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -376,30 +355,26 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        listOf(
-                            Triple("OpenAI", true, "sk-...***"),
-                            Triple("Anthropic", false, "Not set"),
-                            Triple("Google", true, "Connected")
-                        ).forEach { (name, hasKey, status) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(if (hasKey) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline)
-                                    )
-                                    Text(name, style = MaterialTheme.typography.bodyMedium)
-                                }
-                                Text(status, style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (uiState.providerStatuses.isEmpty()) {
+                            Text("Provider registry unavailable", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Your Sable server is unreachable or too old for /v1/providers.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            uiState.providerStatuses.sortedBy { it.name }.forEach { provider ->
+                                ProviderStatusRow(
+                                    name = provider.name,
+                                    note = provider.note,
+                                    configured = provider.configured,
+                                )
                             }
-                        }
-                        TextButton(onClick = { /* TODO: add provider form */ }) {
-                            Text("Add provider")
+                            Text(
+                                "Status: Configured = key wired in Bitwarden; Needs key = add one on the server. Tap a configured model at the top to make it your active one.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -420,12 +395,18 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         val context = androidx.compose.ui.platform.LocalContext.current
-                        val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-                        val memInfo = android.app.ActivityManager.MemoryInfo()
-                        activityManager.getMemoryInfo(memInfo)
-                        val totalRamGb = memInfo.totalMem / (1024 * 1024 * 1024)
-                        val availRamGb = memInfo.availMem / (1024 * 1024 * 1024)
-                        val soc = android.os.Build.SOC_MODEL ?: "Unknown"
+                        // Snapshot once — ActivityManager queries on every recomposition are wasted work.
+                        val deviceStats = remember {
+                            val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                            val memInfo = android.app.ActivityManager.MemoryInfo()
+                            activityManager.getMemoryInfo(memInfo)
+                            Triple(
+                                memInfo.totalMem / (1024 * 1024 * 1024),
+                                memInfo.availMem / (1024 * 1024 * 1024),
+                                android.os.Build.SOC_MODEL ?: "Unknown",
+                            )
+                        }
+                        val (totalRamGb, availRamGb, soc) = deviceStats
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("RAM", style = MaterialTheme.typography.bodyMedium)
                             Text("${totalRamGb} GB (${availRamGb} GB free)", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -499,16 +480,36 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Sable", style = MaterialTheme.typography.titleSmall)
-                        Text("Version 0.2.0 (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val aboutContext = androidx.compose.ui.platform.LocalContext.current
+                        val appVersion = remember {
+                            try {
+                                val pm = aboutContext.packageManager
+                                val info = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                                    pm.getPackageInfo(aboutContext.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                                } else {
+                                    @Suppress("DEPRECATION") pm.getPackageInfo(aboutContext.packageName, 0)
+                                }
+                                info.versionName ?: "unknown"
+                            } catch (_: Exception) {
+                                "unknown"
+                            }
+                        }
+                        Text("Version $appVersion (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Backend Server: https://sable.llmclouds.au", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val serverOnline = !uiState.serverUnreachable && uiState.modelError == null
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
+                                    .background(if (serverOnline) ConfiguredGreen else MaterialTheme.colorScheme.error)
                             )
-                            Text("Server Status: Online (HTTP 200)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                if (serverOnline) "Server Status: Reachable"
+                                else "Server Status: Unreachable — check connection or re-login",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (serverOnline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                 }

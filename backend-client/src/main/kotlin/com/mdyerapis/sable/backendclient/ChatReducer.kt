@@ -75,6 +75,7 @@ object ChatReducer {
                 id = state.currentMessageId ?: event.messageId.ifEmpty { "unknown" },
                 role = "assistant",
                 content = state.currentContent,
+                timestamp = System.currentTimeMillis(),
             )
             state.copy(
                 conversationId = convId,

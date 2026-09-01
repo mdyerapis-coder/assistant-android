@@ -43,6 +43,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +74,7 @@ fun SessionsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     // Phase 08: server is the source of truth — refresh the thread list
     // every time the sessions screen opens.
@@ -103,6 +110,39 @@ fun SessionsScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
+            if (uiState.sessionsOffline) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        "Offline — showing saved conversations.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                singleLine = true,
+                label = { Text("Search conversations") },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Filled.Search, contentDescription = null)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+            )
             if (uiState.availableSessions.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -181,19 +221,59 @@ fun SessionsScreen(
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.availableSessions, key = { it.id }) { session ->
-                        ConversationRow(
-                            session = session,
-                            onClick = {
-                                viewModel.switchConversation(session.id)
-                                onOpenConversation(session.id)
-                            },
-                            onDelete = { showDeleteConfirm = session.id }
-                        )
+                val visibleSessions = filterSessions(uiState.availableSessions, searchQuery)
+                if (visibleSessions.isEmpty()) {
+                    Text(
+                        "No conversations match \"$searchQuery\"",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(visibleSessions, key = { it.id }) { session ->
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value == SwipeToDismissBoxValue.EndToStart) {
+                                        showDeleteConfirm = session.id
+                                        false
+                                    } else {
+                                        false
+                                    }
+                                }
+                            )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                enableDismissFromStartToEnd = false,
+                                backgroundContent = {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(end = 16.dp),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.DeleteOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                            ) {
+                                ConversationRow(
+                                    session = session,
+                                    onClick = {
+                                        viewModel.switchConversation(session.id)
+                                        onOpenConversation(session.id)
+                                    },
+                                    onDelete = { showDeleteConfirm = session.id }
+                                )
+                            }
+                        }
                     }
                 }
             }

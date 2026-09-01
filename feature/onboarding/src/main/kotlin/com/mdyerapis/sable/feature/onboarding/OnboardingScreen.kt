@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,9 +43,16 @@ fun OnboardingScreen(
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.isDone) {
-        if (uiState.isDone) onTokenAccepted()
+        if (uiState.isDone) {
+            android.media.MediaPlayer.create(context, OnboardingR.raw.startup_whistle)?.apply {
+                setOnCompletionListener { release() }
+                start()
+            }
+            onTokenAccepted()
+        }
     }
 
     Box(

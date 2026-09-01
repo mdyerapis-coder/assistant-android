@@ -17,11 +17,14 @@ import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -46,6 +49,7 @@ open class ChatViewModel @Inject constructor(
 
     private var apiClient: ChatApiClient? = null
     private var baseUrl: String = "https://sable.llmclouds.au"
+    private var streamJob: Job? = null
 
     private var activeConversationId: String? = null
     private var activeServerConversationId: String? = null
@@ -128,7 +132,7 @@ open class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             conversationStore.messagesFor(conversationId).collect { stored ->
                 val messages = stored.map {
-                    ChatMessage(id = it.id, role = it.role, content = it.content)
+                    ChatMessage(id = it.id, role = it.role, content = it.content, timestamp = it.createdAt)
                 }
                 _uiState.value = _uiState.value.copy(
                     chatState = _uiState.value.chatState.copy(messages = messages)
@@ -155,6 +159,7 @@ open class ChatViewModel @Inject constructor(
         threadsApi = createThreadsApi(client, baseUrl)
         refreshGoogleStatus()
         loadModels()
+        loadProviderStatuses()
         // Phase 08: hydrate server threads into the Room cache on every
         // client (re)initialization — fresh installs resume from here.
         syncThreads()
@@ -180,6 +185,7 @@ open class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) { api.listThreads() }
+                _uiState.value = _uiState.value.copy(sessionsOffline = false)
                 for (thread in response.threads) {
                     conversationStore.cacheServerThread(
                         serverConversationId = thread.id,
@@ -191,6 +197,7 @@ open class ChatViewModel @Inject constructor(
                 }
             } catch (_: Exception) {
                 // Offline or backend unavailable — cached threads remain.
+                _uiState.value = _uiState.value.copy(sessionsOffline = true)
             }
         }
     }
@@ -228,6 +235,18 @@ open class ChatViewModel @Inject constructor(
         }
     }
 
+    private fun loadProviderStatuses() {
+        val client = apiClient ?: return
+        viewModelScope.launch {
+            try {
+                val statuses = withContext(Dispatchers.IO) { client.listProviders() }
+                _uiState.value = _uiState.value.copy(providerStatuses = statuses.providers)
+            } catch (_: Exception) {
+                // Older backends lack /v1/providers — settings hides the section.
+            }
+        }
+    }
+
     private fun loadModels() {
         val client = apiClient ?: return
         _uiState.value = _uiState.value.copy(isLoadingModels = true, modelError = null)
@@ -245,6 +264,7 @@ open class ChatViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     models = catalog.models,
                     selectedModelId = selectedModelId,
+                    recentModelIds = modelPreferenceRepository.getRecentModelIds(),
                     isLoadingModels = false,
                 )
             } catch (exception: Exception) {
@@ -258,7 +278,16 @@ open class ChatViewModel @Inject constructor(
 
     fun selectModel(modelId: String) {
         modelPreferenceRepository.setSelectedModelId(modelId)
-        _uiState.value = _uiState.value.copy(selectedModelId = modelId)
+        _uiState.value = _uiState.value.copy(
+            selectedModelId = modelId,
+            recentModelIds = modelPreferenceRepository.getRecentModelIds(),
+        )
+    }
+
+    /** Retry entry point for the settings error card. */
+    fun refreshModels() {
+        loadModels()
+        loadProviderStatuses()
     }
 
     fun selectLocalModel(id: String) {
@@ -419,8 +448,53 @@ open class ChatViewModel @Inject constructor(
         }
     }
 
+    private fun drainNextQueued() {
+        val queued = _uiState.value.pendingMessages
+        if (queued.isEmpty()) return
+        _uiState.value = _uiState.value.copy(pendingMessages = queued.drop(1))
+        sendMessage(queued.first())
+    }
+
+    /** Cancels the in-flight reply, keeps any partial text, drops the queue. */
+    fun stopGenerating() {
+        val chat = _uiState.value.chatState
+        streamJob?.cancel()
+        streamJob = null
+        val finalized = if (chat.currentContent.isNotBlank()) {
+            val partial = ChatMessage(
+                id = "stopped-${System.currentTimeMillis()}",
+                role = "assistant",
+                content = chat.currentContent,
+                timestamp = System.currentTimeMillis(),
+            )
+            activeConversationId?.let { convoId ->
+                viewModelScope.launch {
+                    conversationStore.appendMessage(convoId, partial.id, partial.role, partial.content)
+                }
+            }
+            chat.copy(
+                messages = chat.messages + partial,
+                currentMessageId = null,
+                currentContent = "",
+                isLoading = false,
+            )
+        } else {
+            chat.copy(currentMessageId = null, isLoading = false)
+        }
+        _uiState.value = _uiState.value.copy(
+            chatState = finalized,
+            pendingMessages = emptyList(),
+        )
+    }
+
     fun sendMessage(text: String) {
         val currentState = _uiState.value.chatState
+        if (currentState.isLoading && text.isNotBlank()) {
+            _uiState.value = _uiState.value.copy(
+                pendingMessages = _uiState.value.pendingMessages + text,
+            )
+            return
+        }
 
         // On-Device Mode
         if (_uiState.value.appModelMode == AppModelMode.OnDevice) {
@@ -440,6 +514,7 @@ open class ChatViewModel @Inject constructor(
                 id = "user-${System.currentTimeMillis()}",
                 role = "user",
                 content = text,
+                timestamp = System.currentTimeMillis(),
             )
             val withUserMessage = currentState.copy(
                 messages = currentState.messages + userMsg,
@@ -449,33 +524,40 @@ open class ChatViewModel @Inject constructor(
             )
             _uiState.value = _uiState.value.copy(chatState = withUserMessage)
 
-            viewModelScope.launch {
+            streamJob = viewModelScope.launch {
                 val convoId = ensureConversation()
                 conversationStore.appendMessage(convoId, userMsg.id, "user", text)
 
-                var accumulated = ""
-                val result = llmInferenceService.generate(text) { partial ->
-                    accumulated += partial
-                    _uiState.value = _uiState.value.copy(
-                        chatState = _uiState.value.chatState.copy(currentContent = accumulated)
-                    )
-                }
+                try {
+                    var accumulated = ""
+                    val result = llmInferenceService.generate(text) { partial ->
+                        accumulated += partial
+                        _uiState.value = _uiState.value.copy(
+                            chatState = _uiState.value.chatState.copy(currentContent = accumulated)
+                        )
+                    }
 
-                val finalContent = accumulated.ifBlank { result }
-                val assistantMsg = ChatMessage(
-                    id = "local-${System.currentTimeMillis()}",
-                    role = "assistant",
-                    content = finalContent,
-                )
-                val updatedMessages = _uiState.value.chatState.messages + assistantMsg
-                _uiState.value = _uiState.value.copy(
-                    chatState = _uiState.value.chatState.copy(
-                        messages = updatedMessages,
-                        currentContent = "",
-                        isLoading = false,
+                    val finalContent = accumulated.ifBlank { result }
+                    val assistantMsg = ChatMessage(
+                        id = "local-${System.currentTimeMillis()}",
+                        role = "assistant",
+                        content = finalContent,
+                        timestamp = System.currentTimeMillis(),
                     )
-                )
-                conversationStore.appendMessage(convoId, assistantMsg.id, "assistant", finalContent)
+                    val updatedMessages = _uiState.value.chatState.messages + assistantMsg
+                    _uiState.value = _uiState.value.copy(
+                        chatState = _uiState.value.chatState.copy(
+                            messages = updatedMessages,
+                            currentContent = "",
+                            isLoading = false,
+                        )
+                    )
+                    conversationStore.appendMessage(convoId, assistantMsg.id, "assistant", finalContent)
+                } catch (e: CancellationException) {
+                    throw e
+                }
+                streamJob = null
+                drainNextQueued()
             }
             return
         }
@@ -487,6 +569,7 @@ open class ChatViewModel @Inject constructor(
             id = "user-${System.currentTimeMillis()}",
             role = "user",
             content = text,
+            timestamp = System.currentTimeMillis(),
         )
         val withUserMessage = currentState.copy(
             messages = currentState.messages + userMsg,
@@ -495,7 +578,7 @@ open class ChatViewModel @Inject constructor(
         )
         _uiState.value = _uiState.value.copy(chatState = withUserMessage)
 
-        viewModelScope.launch {
+        streamJob = viewModelScope.launch {
             val convoId = ensureConversation()
             conversationStore.appendMessage(convoId, userMsg.id, "user", text)
             try {
@@ -518,13 +601,10 @@ open class ChatViewModel @Inject constructor(
                     return@launch
                 }
 
-                val reader = response.body?.source() ?: return@launch
+                // A healthy reply clears any stale recovery banner.
+                _uiState.value = _uiState.value.copy(serverUnreachable = false)
                 var state = _uiState.value.chatState
-
-                while (!reader.exhausted()) {
-                    val line = reader.readUtf8Line() ?: break
-                    if (line.isBlank()) continue
-                    val event = SseFrameCodec.parse(line)
+                SseFrameCodec.events(response).collect { event ->
                     state = ChatReducer.reduce(state, event)
                     _uiState.value = _uiState.value.copy(chatState = state)
                 }
@@ -542,7 +622,9 @@ open class ChatViewModel @Inject constructor(
                     .forEach { msg ->
                         conversationStore.appendMessage(convoId, msg.id, msg.role, msg.content)
                     }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
                     chatState = _uiState.value.chatState.copy(
                         error = "Couldn't reach $baseUrl - check the server is running and reachable.",
@@ -551,6 +633,8 @@ open class ChatViewModel @Inject constructor(
                     serverUnreachable = true,
                 )
             }
+            streamJob = null
+            drainNextQueued()
         }
     }
 

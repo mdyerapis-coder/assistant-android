@@ -99,7 +99,7 @@ fun MessageBubble(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Text(
+                MessageContent(
                     text = content,
                     color = contentColor,
                     style = MaterialTheme.typography.bodyLarge,

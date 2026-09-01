@@ -1,6 +1,11 @@
 package com.mdyerapis.sable.backendclient
 
 import com.mdyerapis.sable.core.model.ChatEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import okhttp3.Response
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -62,4 +67,18 @@ object SseFrameCodec {
             ChatEvent.Unknown()
         }
     }
+
+    /**
+     * Streams parsed server events while keeping the blocking response body on
+     * [Dispatchers.IO]. Downstream collectors stay on their own context.
+     */
+    fun events(response: Response): Flow<ChatEvent> = flow {
+        response.use { streamedResponse ->
+            val reader = streamedResponse.body?.source() ?: return@use
+            while (!reader.exhausted()) {
+                val line = reader.readUtf8Line() ?: break
+                if (line.isNotBlank()) emit(parse(line))
+            }
+        }
+    }.flowOn(Dispatchers.IO)
 }

@@ -1,10 +1,46 @@
 package com.mdyerapis.sable.backendclient
 
 import com.mdyerapis.sable.core.model.ChatEvent
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.ResponseBody
+import okio.Buffer
 import org.junit.Assert.*
 import org.junit.Test
 
 class SseFrameCodecTest {
+
+    // --- chat request shape ---
+
+    @Test
+    fun `chat request carries the device timezone`() {
+        val body = Json.encodeToString(
+            ChatApiClient.ChatRequest(
+                message = "what time is it",
+                timezone = "Australia/Brisbane",
+            )
+        )
+        assertTrue(body.contains(""""timezone":"Australia/Brisbane""""))
+    }
+
+    @Test
+    fun `providers response parses configured flags`() {
+        val json = """{"providers":[
+            {"name":"ollama","default_model":"llama3.2:3b","note":"local","configured":true,"selectable":true},
+        {"name":"groq","default_model":"gpt-oss","note":"fast","configured":false,"selectable":true}
+        ]}""".trimIndent().replace("\n", "")
+        val parsed = Json.decodeFromString<ChatApiClient.ProvidersResponse>(json)
+        assertEquals(2, parsed.providers.size)
+        assertTrue(parsed.providers[0].configured)
+        assertTrue(!parsed.providers[1].configured)
+    }
 
     // --- delta ---
 
@@ -129,5 +165,37 @@ class SseFrameCodecTest {
         val line = """data: {"type":"delta","content":"hi"}"""
         val event = SseFrameCodec.parse(line)
         assertEquals("", (event as ChatEvent.Delta).conversationId)
+    }
+    @Test
+    fun `events reads SSE body off the caller thread`() = runBlocking {
+        val callerThread = Thread.currentThread()
+        var bodyThread: Thread? = null
+        val body = object : ResponseBody() {
+            override fun contentType() = "text/event-stream".toMediaType()
+            override fun contentLength() = -1L
+            override fun source() = Buffer().apply {
+                bodyThread = Thread.currentThread()
+                writeUtf8(
+                    """data: {"type":"delta","conversation_id":"c","content":"hi"}
+
+[DONE]
+"""
+                )
+            }
+        }
+        val response = Response.Builder()
+            .request(Request.Builder().url("https://example.test/chat").build())
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body(body)
+            .build()
+
+        val events = SseFrameCodec.events(response).toList()
+
+        assertNotEquals(callerThread, bodyThread)
+        assertEquals(2, events.size)
+        assertTrue(events.first() is ChatEvent.Delta)
+        assertTrue(events.last() is ChatEvent.MessageCompleted)
     }
 }

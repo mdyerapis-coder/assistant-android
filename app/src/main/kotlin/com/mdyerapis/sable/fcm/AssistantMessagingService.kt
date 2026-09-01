@@ -3,11 +3,14 @@ package com.mdyerapis.sable.fcm
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import android.media.AudioAttributes
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.mdyerapis.sable.backendclient.DeviceTokenRegistrar
+import com.mdyerapis.sable.R
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -45,13 +48,21 @@ class AssistantMessagingService : FirebaseMessagingService() {
     }
 
     private fun showNotification(title: String, body: String) {
-        val channelId = "reminders"
+        // A versioned channel ensures existing installs pick up Sable's sound.
+        // Android intentionally freezes a channel's sound after creation.
+        val channelId = "sable_reminders_v2"
+        val sound = Uri.parse("android.resource://$packageName/${R.raw.notification_chirp}")
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Reminders",
+                "Sable reminders",
                 NotificationManager.IMPORTANCE_HIGH,
-            )
+            ).apply {
+                setSound(sound, audioAttributes)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
@@ -59,6 +70,7 @@ class AssistantMessagingService : FirebaseMessagingService() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
+            .setSound(sound)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

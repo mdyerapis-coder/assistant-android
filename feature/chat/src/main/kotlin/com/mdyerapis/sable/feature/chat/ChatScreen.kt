@@ -10,14 +10,22 @@ import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,8 +44,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mdyerapis.sable.core.designsystem.components.Composer
+import com.mdyerapis.sable.core.designsystem.components.EmberStreamingIndicator
+import com.mdyerapis.sable.core.designsystem.components.dayLabel
+import com.mdyerapis.sable.core.designsystem.components.needsDaySeparator
+import com.mdyerapis.sable.feature.chat.R as ChatR
 import com.mdyerapis.sable.core.designsystem.components.ErrorBanner
-import com.mdyerapis.sable.core.designsystem.components.LoadingIndicator
 import com.mdyerapis.sable.core.designsystem.components.MessageBubble
 import com.mdyerapis.sable.core.designsystem.components.ModelStatusChip
 import com.mdyerapis.sable.core.designsystem.components.ToolCallChip
@@ -46,7 +57,7 @@ import com.mdyerapis.sable.feature.localmodel.LocalModelInfo
 import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     onNavigateSettings: () -> Unit = {},
@@ -166,14 +177,53 @@ fun ChatScreen(
                         active?.name ?: "On-Device LLM"
                     } else {
                         val active = uiState.models.firstOrNull { it.id == uiState.selectedModelId }
-                        active?.model ?: "Cloud Assistant"
+                        active?.let { displayNameFor(it) } ?: "Cloud Assistant"
                     }
 
-                    ModelStatusChip(
-                        label = activeLabel,
-                        isOnDevice = uiState.appModelMode == AppModelMode.OnDevice,
-                        onClick = onNavigateSettings,
-                    )
+                    var showModelSwitcher by remember { mutableStateOf(false) }
+                    // Quick-switch: MRU cloud models in a dropdown; falls back to
+                    // Settings when on-device or no history yet.
+                    val recentOptions = uiState.recentModelIds
+                        .mapNotNull { id -> uiState.models.firstOrNull { it.id == id } }
+                        .filter { it.id != uiState.selectedModelId }
+                    val canQuickSwitch = uiState.appModelMode == AppModelMode.Backend && recentOptions.isNotEmpty()
+                    Box {
+                        ModelStatusChip(
+                            label = activeLabel,
+                            isOnDevice = uiState.appModelMode == AppModelMode.OnDevice,
+                            onClick = { if (canQuickSwitch) showModelSwitcher = true else onNavigateSettings() },
+                        )
+                        DropdownMenu(
+                            expanded = showModelSwitcher,
+                            onDismissRequest = { showModelSwitcher = false }
+                        ) {
+                            recentOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(displayNameFor(option))
+                                            Text(
+                                                option.model,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.selectModel(option.id)
+                                        showModelSwitcher = false
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("All models...") },
+                                onClick = {
+                                    showModelSwitcher = false
+                                    onNavigateSettings()
+                                }
+                            )
+                        }
+                    }
                 },
                 actions = {
                     Box {
@@ -222,7 +272,8 @@ fun ChatScreen(
                                     val label = if (uiState.appModelMode == AppModelMode.OnDevice) {
                                         uiState.installedLocalModels.firstOrNull { it.isSelected }?.name ?: "On-Device model"
                                     } else {
-                                        uiState.models.firstOrNull { it.id == uiState.selectedModelId }?.model ?: "Cloud model"
+                                        uiState.models.firstOrNull { it.id == uiState.selectedModelId }
+                                            ?.let { displayNameFor(it) } ?: "Cloud model"
                                     }
                                     Text("Model: $label")
                                 },
@@ -250,8 +301,10 @@ fun ChatScreen(
                         inputText = ""
                     }
                 },
-                enabled = !uiState.chatState.isLoading,
+                enabled = true,
                 placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) "Message local model..." else "Ask assistant...",
+                isStreaming = uiState.chatState.isLoading,
+                onStop = { viewModel.stopGenerating() },
                 modifier = Modifier.imePadding(),
                 isListening = voiceController.isListening,
                 onMicClick = {
@@ -301,11 +354,41 @@ fun ChatScreen(
                     }
                 }
             }
-            // Messages stream list
+            // Messages stream list — layered over a static droid watermark.
+            val watermarkDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val watermarkEmber = MaterialTheme.colorScheme.primary
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(220.dp)
+                    .drawBehind {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    watermarkEmber.copy(
+                                        alpha = if (watermarkDark) 0.10f else 0.07f
+                                    ),
+                                    Color.Transparent,
+                                ),
+                                center = center,
+                                radius = size.minDimension / 1.1f,
+                            ),
+                            radius = size.minDimension / 1.1f,
+                        )
+                    },
+            ) {
+                Image(
+                    painter = painterResource(ChatR.drawable.ic_droid_avatar),
+                    contentDescription = null,
+                    alpha = if (watermarkDark) 0.07f else 0.05f,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 contentPadding = PaddingValues(vertical = 12.dp),
@@ -404,13 +487,41 @@ fun ChatScreen(
                     }
                 }
 
-                items(uiState.chatState.messages) { msg ->
+                itemsIndexed(
+                    uiState.chatState.messages,
+                    key = { _, msg -> msg.id },
+                ) { index, msg ->
+                    if (msg.timestamp > 0L &&
+                        (index == 0 || needsDaySeparator(
+                            uiState.chatState.messages[index - 1].timestamp,
+                            msg.timestamp,
+                        ))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                            Text(
+                                text = dayLabel(msg.timestamp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                        }
+                    }
                     MessageBubble(
                         message = msg,
-                        modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(msg.content))
-                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                        }
+                        modifier = Modifier.combinedClickable(
+                            onLongClick = {
+                                clipboardManager.setText(AnnotatedString(msg.content))
+                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            onClick = {},
+                        )
                     )
                 }
 
@@ -435,10 +546,11 @@ fun ChatScreen(
                                 .padding(16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            LoadingIndicator()
+                            EmberStreamingIndicator()
                         }
                     }
                 }
+            }
             }
 
             uiState.chatState.error?.let { error ->
