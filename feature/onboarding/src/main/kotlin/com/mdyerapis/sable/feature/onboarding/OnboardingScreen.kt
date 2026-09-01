@@ -280,7 +280,7 @@ private fun ConnectForm(
                     value = uiState.baseUrl,
                     onValueChange = { viewModel.updateBaseUrl(it) },
                     label = { Text("Server URL") },
-                    placeholder = { Text("https://sable.llmclouds.au") },
+                    placeholder = { Text("https://assistant.llmclouds.au") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),

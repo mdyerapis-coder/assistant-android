@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /** Default backend — the hosted Sable instance. Editable at onboarding. */
-const val DEFAULT_BASE_URL = "https://sable.llmclouds.au"
+const val DEFAULT_BASE_URL = "https://assistant.llmclouds.au"
 
 data class OnboardingUiState(
     val currentFrame: Int = 0, // 0-3: story frames + connect form

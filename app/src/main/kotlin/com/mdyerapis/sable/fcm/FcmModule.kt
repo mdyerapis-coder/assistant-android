@@ -21,7 +21,7 @@ object FcmModule {
      * relay must target the server the user onboarded with, so the
      * persisted baseUrl wins when present.
      */
-    private const val DEFAULT_BACKEND_BASE_URL = "https://sable.llmclouds.au"
+    private const val DEFAULT_BACKEND_BASE_URL = "https://assistant.llmclouds.au"
 
     @Provides
     @Singleton

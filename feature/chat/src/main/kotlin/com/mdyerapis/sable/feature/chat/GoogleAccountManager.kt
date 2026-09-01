@@ -30,7 +30,7 @@ open class GoogleAccountManager @Inject constructor(
     private val client: OkHttpClient,
 ) {
     @Volatile
-    private var baseUrl: String = "https://sable.llmclouds.au"
+    private var baseUrl: String = "https://assistant.llmclouds.au"
 
     open fun configureBaseUrl(url: String) {
         baseUrl = url.trimEnd('/')

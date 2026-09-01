@@ -495,7 +495,7 @@ fun SettingsScreen(
                             }
                         }
                         Text("Version $appVersion (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Backend Server: https://sable.llmclouds.au", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Backend Server: https://assistant.llmclouds.au", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val serverOnline = !uiState.serverUnreachable && uiState.modelError == null
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(

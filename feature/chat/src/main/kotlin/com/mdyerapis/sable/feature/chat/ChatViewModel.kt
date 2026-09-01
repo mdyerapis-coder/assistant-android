@@ -48,7 +48,7 @@ open class ChatViewModel @Inject constructor(
     val uiState: StateFlow<ChatUiState> = _uiState
 
     private var apiClient: ChatApiClient? = null
-    private var baseUrl: String = "https://sable.llmclouds.au"
+    private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null
 
     private var activeConversationId: String? = null
