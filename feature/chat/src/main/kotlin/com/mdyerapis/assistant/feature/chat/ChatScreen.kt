@@ -20,9 +20,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,6 +56,7 @@ fun ChatScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var showClearDialog by remember { mutableStateOf(false) }
+    var showOverflow by remember { mutableStateOf(false) }
     val voiceController = remember { VoiceController(context) }
     DisposableEffect(Unit) {
         onDispose { voiceController.destroy() }
@@ -171,39 +172,62 @@ fun ChatScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onNavigateSessions) {
-                        Icon(
-                            imageVector = Icons.Filled.History,
-                            contentDescription = "Conversation history"
-                        )
-                    }
-                    if (uiState.chatState.messages.isNotEmpty()) {
-                        IconButton(onClick = { showClearDialog = true }) {
+                    Box {
+                        IconButton(onClick = { showOverflow = true }) {
                             Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
-                                contentDescription = "Clear conversation"
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More options"
                             )
                         }
-                    }
-                    IconButton(onClick = onNavigateSettings) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
-                    IconButton(onClick = { viewModel.toggleTts() }) {
-                        Icon(
-                            imageVector = if (uiState.ttsEnabled) {
-                                Icons.Filled.VolumeUp
-                            } else {
-                                Icons.Filled.VolumeOff
-                            },
-                            contentDescription = if (uiState.ttsEnabled) {
-                                "Mute spoken replies"
-                            } else {
-                                "Enable spoken replies"
-                            },
-                        )
+                        DropdownMenu(
+                            expanded = showOverflow,
+                            onDismissRequest = { showOverflow = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Conversation history") },
+                                onClick = {
+                                    showOverflow = false
+                                    onNavigateSessions()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (uiState.ttsEnabled) "Mute spoken replies" else "Enable spoken replies") },
+                                onClick = {
+                                    showOverflow = false
+                                    viewModel.toggleTts()
+                                }
+                            )
+                            if (uiState.chatState.messages.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("Clear conversation") },
+                                    onClick = {
+                                        showOverflow = false
+                                        showClearDialog = true
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Settings") },
+                                onClick = {
+                                    showOverflow = false
+                                    onNavigateSettings()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    val label = if (uiState.appModelMode == AppModelMode.OnDevice) {
+                                        uiState.installedLocalModels.firstOrNull { it.isSelected }?.name ?: "On-Device model"
+                                    } else {
+                                        uiState.models.firstOrNull { it.id == uiState.selectedModelId }?.model ?: "Cloud model"
+                                    }
+                                    Text("Model: $label")
+                                },
+                                onClick = {
+                                    showOverflow = false
+                                    onNavigateSettings()
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
