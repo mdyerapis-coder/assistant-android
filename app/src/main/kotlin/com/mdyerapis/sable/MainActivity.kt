@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.mdyerapis.sable.core.designsystem.theme.AssistantTheme
+import com.mdyerapis.sable.core.designsystem.theme.SableTheme
 import com.mdyerapis.sable.feature.chat.ExternalIntake
 import com.mdyerapis.sable.feature.chat.GoogleAccountManager
 import com.mdyerapis.sable.feature.chat.GoogleOAuthCompletionNotifier
@@ -22,13 +22,14 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     @Inject
     lateinit var googleOAuthCompletionNotifier: GoogleOAuthCompletionNotifier
     @Inject
     lateinit var smsRelayController: SmsRelayController
     @Inject
     lateinit var externalIntake: ExternalIntake
+    @Inject
+    lateinit var bearerTokenRepository: com.mdyerapis.sable.core.security.BearerTokenRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +37,7 @@ class MainActivity : ComponentActivity() {
         handleOAuthDeepLink(intent)
         handleShareAndDeepLink(intent)
         setContent {
-            AssistantTheme {
+            SableTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

@@ -1,6 +1,7 @@
 package com.mdyerapis.sable.core.designsystem.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -9,6 +10,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Shapes
 
 // Brand palette: terracotta primary, warm neutral surfaces, dark-first default.
 // Source: ui-ux-pro-max colors.csv (AI/Chatbot Platform). All pairs meet 4.5:1.
@@ -53,8 +56,15 @@ private val BrandDark = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6),
 )
 
+private val SableShapes = Shapes(
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
 @Composable
-fun AssistantTheme(
+fun SableTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
@@ -68,6 +78,7 @@ fun AssistantTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        shapes = SableShapes,
         content = content
     )
 }
