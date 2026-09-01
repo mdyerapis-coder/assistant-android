@@ -1,5 +1,8 @@
 package com.mdyerapis.sable.core.designsystem.components
 
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,11 +27,8 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -45,7 +45,8 @@ fun Composer(
     onMicClick: (() -> Unit)? = null,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -84,7 +85,7 @@ fun Composer(
             if (onMicClick != null) {
                 val pulse by animateFloatAsState(
                     targetValue = if (isListening) 1f else 0f,
-                    animationSpec = tween(700),
+                    animationSpec = tween(600, easing = EaseInOut),
                     label = "micPulse",
                 )
                 val scale = if (isListening) 1f + 0.15f * pulse else 1f
