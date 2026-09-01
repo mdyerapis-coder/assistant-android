@@ -1,18 +1,17 @@
 package com.mdyerapis.sable.core.designsystem.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Text
 import com.mdyerapis.sable.core.model.ChatMessage
 
 @Composable
@@ -25,21 +24,7 @@ fun MessageBubble(
     val isUser = role.equals("user", ignoreCase = true)
     val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
 
-    // Assistant: plain text on background, no bubble
-    // User: subtle bubble, right-aligned, asymmetric radius
-    val contentColor = if (isUser) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-
-    val displayText = if (isUser) {
-        // User message
-        content
-    } else {
-        // Assistant message: plain text, no bubble
-        content
-    }
+    val contentColor = MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = modifier
@@ -48,26 +33,27 @@ fun MessageBubble(
         contentAlignment = alignment
     ) {
         if (isUser) {
-            // User bubble
+            // User bubble: 20dp rounded, surfaceContainerHigh
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Text(
-                        text = displayText,
-                        color = contentColor,
-                        style = MaterialTheme.typography.bodyLarge
+                    .fillMaxWidth(0.85f)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        RoundedCornerShape(20.dp)
                     )
-                }
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = content,
+                    color = contentColor,
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
         } else {
             // Assistant: plain text on background, no bubble
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Text(
-                    text = displayText,
+                    text = content,
                     color = contentColor,
                     style = MaterialTheme.typography.bodyLarge
                 )
