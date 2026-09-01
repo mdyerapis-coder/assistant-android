@@ -78,6 +78,7 @@ fun SableTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = SableTypography,
         shapes = SableShapes,
         content = content
     )

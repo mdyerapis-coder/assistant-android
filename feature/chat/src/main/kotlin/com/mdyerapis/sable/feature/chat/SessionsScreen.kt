@@ -1,5 +1,13 @@
 package com.mdyerapis.sable.feature.chat
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import com.mdyerapis.sable.feature.chat.R as ChatR
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -98,13 +107,40 @@ fun SessionsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 32.dp),
+                        .padding(top = 48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
+                    // Droid with ember glow
+                    val emberColor = MaterialTheme.colorScheme.primary
+                    val transparent = Color.Transparent
+                    Box(
+                        modifier = Modifier
+                            .size(140.dp)
+                            .drawBehind {
+                                val radius = size.minDimension / 1.4f
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(emberColor.copy(alpha = 0.2f), transparent),
+                                        center = Offset(size.width / 2f, size.height / 2f),
+                                        radius = radius
+                                    ),
+                                    radius = radius,
+                                    center = Offset(size.width / 2f, size.height / 2f)
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(ChatR.drawable.ic_droid_avatar),
+                            contentDescription = "Sable",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(88.dp)
+                        )
+                    }
                     Text(
                         "No conversations yet.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Row(

@@ -9,6 +9,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -355,25 +358,45 @@ fun ChatScreen(
 
                                 suggestions.forEachIndexed { index, (label, prompt) ->
                                     val isPrimary = index == 0
-                                    SuggestionChip(
-                                        onClick = {
-                                            viewModel.sendMessage(prompt)
-                                        },
-                                        label = { Text(label) },
-                                        modifier = Modifier.heightIn(min = 48.dp),
-                                        shape = MaterialTheme.shapes.medium,
-                                        colors = if (isPrimary) {
-                                            SuggestionChipDefaults.suggestionChipColors(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                labelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        } else {
-                                            SuggestionChipDefaults.suggestionChipColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        },
-                                    )
+                                    AnimatedVisibility(
+                                        visible = true,
+                                        enter = fadeIn(animationSpec = tween(350, delayMillis = index * 60))
+                                    ) {
+                                        Surface(
+                                            onClick = { viewModel.sendMessage(prompt) },
+                                            shape = MaterialTheme.shapes.medium,
+                                            color = if (isPrimary) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                if (isPrimary) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                            ),
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.padding(horizontal = 14.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .background(
+                                                            if (isPrimary) MaterialTheme.colorScheme.primary
+                                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                            androidx.compose.foundation.shape.CircleShape
+                                                        )
+                                                )
+                                                Text(
+                                                    text = label,
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = if (isPrimary) MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
