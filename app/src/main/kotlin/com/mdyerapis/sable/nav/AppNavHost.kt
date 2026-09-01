@@ -1,5 +1,11 @@
 package com.mdyerapis.sable.nav
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +25,8 @@ import com.mdyerapis.sable.feature.onboarding.OnboardingScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
+private const val TRANSITION_DURATION = 300
+
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
@@ -32,19 +40,13 @@ fun AppNavHost() {
 
     val resolved = startDestination ?: return
 
-    // External intents (share-sheet, deep link) — when they fire outside the
-    // chat destination, navigate to chat so the pendingComposerText / switch
-    // becomes visible. ChatViewModel (Singleton ExternalIntake, replay=1)
-    // will deliver the payload to the recreated chat VM after navigation.
     val intakeViewModel: NavIntakeViewModel = hiltViewModel()
     LaunchedEffect(intakeViewModel) {
         intakeViewModel.intake.events.collect { event ->
             when (event) {
                 is com.mdyerapis.sable.feature.chat.ExternalIntake.IntakeEvent.SharedText,
                 is com.mdyerapis.sable.feature.chat.ExternalIntake.IntakeEvent.OpenConversation -> {
-                    if (navController.currentDestination?.route != "chat") {
-                        navController.navigate("chat") { launchSingleTop = true }
-                    }
+                    navController.navigate("chat") { launchSingleTop = true }
                 }
             }
         }
@@ -58,29 +60,43 @@ fun AppNavHost() {
                 }
             })
         }
-        composable("chat") {
+        composable(
+            "chat",
+            enterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } },
+            exitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popEnterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popExitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } }
+        ) {
             ChatScreen(
                 onNavigateSettings = { navController.navigate("settings") },
                 onNavigateSessions = { navController.navigate("sessions") }
             )
         }
-        composable("sessions") {
+        composable(
+            "sessions",
+            enterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } },
+            exitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popEnterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popExitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } }
+        ) {
             SessionsScreen(
                 onNavigateBack = {
                     if (!navController.popBackStack()) {
-                        navController.navigate("chat") {
-                            launchSingleTop = true
-                        }
+                        navController.navigate("chat") { launchSingleTop = true }
                     }
                 },
                 onOpenConversation = {
-                    navController.navigate("chat") {
-                        launchSingleTop = true
-                    }
+                    navController.navigate("chat") { launchSingleTop = true }
                 }
             )
         }
-        composable("settings") {
+        composable(
+            "settings",
+            enterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } },
+            exitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popEnterTransition = { slideInHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { -it } },
+            popExitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } }
+        ) {
             SettingsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
