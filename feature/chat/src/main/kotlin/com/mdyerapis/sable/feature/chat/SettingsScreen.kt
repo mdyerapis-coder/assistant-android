@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mdyerapis.sable.core.designsystem.theme.SableMonoFont
 import androidx.hilt.navigation.compose.hiltViewModel
 
 private fun formatModelDisplayName(modelId: String, rawModel: String): String {
@@ -99,8 +100,8 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -394,7 +395,7 @@ fun SettingsScreen(
                                     )
                                     Text(name, style = MaterialTheme.typography.bodyMedium)
                                 }
-                                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(status, style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         TextButton(onClick = { /* TODO: add provider form */ }) {
@@ -427,11 +428,11 @@ fun SettingsScreen(
                         val soc = android.os.Build.SOC_MODEL ?: "Unknown"
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("RAM", style = MaterialTheme.typography.bodyMedium)
-                            Text("${totalRamGb} GB (${availRamGb} GB free)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${totalRamGb} GB (${availRamGb} GB free)", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("SoC", style = MaterialTheme.typography.bodyMedium)
-                            Text(soc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(soc, style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -444,8 +445,8 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -492,14 +493,14 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Sable", style = MaterialTheme.typography.titleSmall)
                         Text("Version 0.2.0 (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Backend Server: https://sable.llmclouds.au", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Backend Server: https://sable.llmclouds.au", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(
                                 modifier = Modifier
