@@ -234,6 +234,7 @@ fun ChatScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
         },
         bottomBar = {
             Composer(
@@ -278,7 +279,7 @@ fun ChatScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         androidx.compose.material3.Text(
-                            text = "Can't reach your assistant server. Check your connection or re-configure the server URL.",
+                            text = "Can't reach Sable. Check your connection or re-configure.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -319,7 +320,7 @@ fun ChatScreen(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "On-Device Assistant Ready" else "Assistant Ready",
+                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "On-Device Sable ready." else "Sable ready.",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
