@@ -5,7 +5,7 @@
 
 ## Firebase project
 - Project: `api-intergrations-501314` (number `182773386348` — same GCP project as OAuth per plan)
-- Android app: `com.mdyerapis.assistant` with `app/google-services.json` (downloaded from Firebase console, gitignored not needed but present per `02.5` backend report)
+- Android app: `com.mdyerapis.sable` with `app/google-services.json` (downloaded from Firebase console, gitignored not needed but present per `02.5` backend report)
 - Service account: `assistant-backend-fcm@api-intergrations-501314.iam.gserviceaccount.com` (`roles/firebase.admin`), key at `/opt/assistant-backend/service-account.json` (chmod 600)
 - BOM: `firebase-bom 33.7.0` + `firebase-messaging` + `play-services-auth` in `gradle/libs.versions.toml`, plugin `com.google.gms.google-services:4.4.2`
 
@@ -26,11 +26,11 @@
   → (older stale tokens cleaned — left 1 valid token)
   ```
 - Backend log `POST /v1/device-tokens 200 OK` on every app cold start (14:09, 14:12, 14:18, 16:19, 16:24) — `journalctl -u assistant | grep device-tokens` shows 200.
-- `dumpsys activity` — `topResumedActivity=com.mdyerapis.assistant/.MainActivity` at time of registration.
+- `dumpsys activity` — `topResumedActivity=com.mdyerapis.sable/.MainActivity` at time of registration.
 
 ### 2. POST_NOTIFICATIONS permission
 - Pre-fix: `appops get POST_NOTIFICATION → ignore` + `dumpsys package ... granted=false`
-- Fix: `adb shell pm grant com.mdyerapis.assistant android.permission.POST_NOTIFICATIONS` + `appops set allow`
+- Fix: `adb shell pm grant com.mdyerapis.sable android.permission.POST_NOTIFICATIONS` + `appops set allow`
 - Post-fix: `granted=true` + `POST_NOTIFICATION: allow` — required for `reminders` channel to post visibly on Android 13+.
 
 ### 3. Scheduler → push (human check)
@@ -47,7 +47,7 @@
     mImportance=HIGH
     when=1787898262515
     ```
-  - `dumpsys notification` shows `disable_effects: 0|com.mdyerapis.assistant|1191867380|null|10379,listenerNoti` at `16:24:22.741775` — system accepted the notification.
+  - `dumpsys notification` shows `disable_effects: 0|com.mdyerapis.sable|1191867380|null|10379,listenerNoti` at `16:24:22.741775` — system accepted the notification.
 - Notification shade capture (`/tmp/shade.png` at 16:29, `1200×2664`, swipe `500 0→500 1200`):
   - Grouped under `Reminder`: `Test FCM final verification` (4m) + `Verify FCM push` (earlier) — both `AUTO_CANCEL`, `BigTextStyle`.
   - Media + Maps + Messenger notifications above confirm shade is fully expanded and our reminders are correctly grouped, not hidden by DND (`VIS_PRIVATE` but `HIGH`).

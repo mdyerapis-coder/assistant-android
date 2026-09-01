@@ -9,7 +9,7 @@ Gradle multi-module Android project with 9 modules, all compiling and lint-clean
 
 | Module | Type | Plugin | Notes |
 |---|---|---|---|
-| `app` | Android application | `android.application` + `kotlin.android` + `kotlin.compose` + `hilt` + `ksp` + `kotlin.serialization` | `com.mdyerapis.assistant`, minSdk 26, compileSdk 35 |
+| `app` | Android application | `android.application` + `kotlin.android` + `kotlin.compose` + `hilt` + `ksp` + `kotlin.serialization` | `com.mdyerapis.sable`, minSdk 26, compileSdk 35 |
 | `core:model` | Android library | `android.library` + `kotlin.android` + `kotlin.serialization` | ChatMessage, ChatEvent, ChatState, ToolCall data types |
 | `core:network` | Android library | `android.library` + `kotlin.android` | OkHttpClientFactory, BearerAuthInterceptor, BackoffPolicy, AppError |
 | `core:security` | Android library | `android.library` + `kotlin.android` | KeystoreSecretStore (AES-GCM), BearerTokenRepository |

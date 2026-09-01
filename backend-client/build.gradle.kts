@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.hilt)
 }
 android {
-    namespace = "com.mdyerapis.assistant.backendclient"
+    namespace = "com.mdyerapis.sable.backendclient"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

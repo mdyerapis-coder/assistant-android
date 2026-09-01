@@ -6,7 +6,7 @@
 ## What shipped
 
 - Chrome Custom Tab launch for `GET /oauth/google/start`; no WebView and no Google tokens on the phone.
-- `assistantapp://oauth-complete` deep-link handling in `MainActivity`.
+- `sableapp://oauth-complete` deep-link handling in `MainActivity`.
 - A live Google connection row in chat with connected/disconnected status and Connect/Disconnect actions.
 - `singleTop` activity delivery so OAuth return reuses the existing app activity instead of stacking a duplicate.
 - An observable OAuth completion signal from `MainActivity` to `ChatViewModel`, which refreshes backend connection status on warm return.
@@ -28,7 +28,7 @@
 
 ## On-device verification
 
-- Before the fix, Android task inspection showed two `MainActivity` records after `assistantapp://oauth-complete`.
+- Before the fix, Android task inspection showed two `MainActivity` records after `sableapp://oauth-complete`.
 - After the fix, Android reported that the deep-link intent was delivered to the existing top activity, and the assistant task contained exactly one `MainActivity`.
 - The app rendered `Google connected` after the OAuth return.
 - UIAutomator measured the Send label ending at y=2450 and the navigation bar starting at y=2534, leaving 84 px of safe clearance.

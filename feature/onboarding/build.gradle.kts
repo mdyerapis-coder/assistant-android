@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 android {
-    namespace = "com.mdyerapis.assistant.feature.onboarding"
+    namespace = "com.mdyerapis.sable.feature.onboarding"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

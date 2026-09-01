@@ -11,7 +11,7 @@ and fixed the wiring bugs it exposed.
 ### Fixes committed (`fb3a8f4`)
 
 1. **Server baseUrl was never persisted from onboarding.**
-   `ChatViewModel` hardcoded `https://assistant.llmclouds.au`, so after
+   `ChatViewModel` hardcoded `https://sable.llmclouds.au`, so after
    onboarding configured `http://localhost:8420`, chat requests still went to
    production (401 with the test token). Onboarding only saved the bearer token.
    - `BearerTokenRepository`: added `saveBaseUrl` / `getBaseUrl` / `clearBaseUrl`
@@ -40,7 +40,7 @@ and fixed the wiring bugs it exposed.
 - **05b debt — on-device re-test**: app connected to local backend
   (`http://localhost:8420` via `adb reverse`), sent messages through the chat UI,
   pulled `assistant_chat.db` + `-wal`/`-shm` via
-  `run-as com.mdyerapis.assistant cat databases/…`:
+  `run-as com.mdyerapis.sable cat databases/…`:
   - `conversation_messages` contains 3 user rows (verified with `sqlite3`):
     `Verify%20phase07`, `Hello%20test`, `Phase%20seven%20verification` — WAL
     pull confirmed the rows (WAL was 90 KB, not a timing artifact).

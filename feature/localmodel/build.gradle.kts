@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mdyerapis.assistant.feature.localmodel"
+    namespace = "com.mdyerapis.sable.feature.localmodel"
     compileSdk = 35
 
     defaultConfig {

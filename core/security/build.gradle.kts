@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 android {
-    namespace = "com.mdyerapis.assistant.core.security"
+    namespace = "com.mdyerapis.sable.core.security"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {

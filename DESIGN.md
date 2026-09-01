@@ -1,4 +1,6 @@
-# Assistant Android Design System
+# Sable Design System
+
+Product name **Sable** — *silent + able*, warm sand & terracotta ember (`#D97757`/`#E08A6B`), dark-first neutrals (`#171717`/`#F5F4EF`). Code package `com.mdyerapis.sable`, domain `sable.llmclouds.au`, scheme `sableapp://`. Code symbol `AssistantTheme` retained for history; brand tokens are `BrandLight`/`BrandDark` in `Theme.kt`. See `docs/sable-positioning.md` for landing/tiers.
 
 ## 0. Research Log
 

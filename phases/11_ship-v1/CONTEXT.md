@@ -1,10 +1,10 @@
 # Phase 11 — Ship v1.0
 
-Gate: Mason chooses real `applicationId` + display name — replaces `com.mdyerapis.assistant` everywhere. Phase cannot start without this. Companion: `assistant-backend/phases/07_ship-v1`.
+Gate: Mason chooses real `applicationId` + display name — replaces `com.mdyerapis.sable` everywhere. Phase cannot start without this. Companion: `assistant-backend/phases/07_ship-v1`.
 
 ## Does
 
-- **Decision gate — identity**: Replace placeholder `applicationId com.mdyerapis.assistant` (`app/build.gradle.kts`, `AndroidManifest.xml`, `strings.xml` `app_name`, all imports) with chosen name. Single commit, no aliases.
+- **Decision gate — identity**: Replace placeholder `applicationId com.mdyerapis.sable` (`app/build.gradle.kts`, `AndroidManifest.xml`, `strings.xml` `app_name`, all imports) with chosen name. Single commit, no aliases.
 - **Release build**: `signingConfigs.release` (keystore not committed; creds via `local.properties`/`~/.gradle/gradle.properties` env) + `buildTypes.release` `isMinifyEnabled=true` `isShrinkResources=true` R8 (`proguard-android-optimize.txt` + `proguard-rules.pro`). Verifies with `assembleRelease`.
 - **Distribution decision (flagged)**: Mason decides — Play Console internal testing track **or** self-distributed signed APK. Record choice in REPORT.md; do not do both.
 - **Crash reporting**: Integrate Crashlytics (or Sentry) — uncaught + ANR, release-only, no PII. Verify forced crash appears in console.

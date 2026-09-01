@@ -10,7 +10,7 @@ Two decisions were confirmed with Mason during planning:
 - **Backend host: the VPS at 103.108.228.3** (currently reachable via an SSH alias tied to the earlier project — rename that alias to something neutral as a Phase 0 cleanup step), not masons-ground or the laptop. It already has Caddy configured with working TLS on the `llmclouds.au` domain (Mason's own domain), is always-on (required for reminders to fire reliably), and is meaningfully cleaner than masons-ground, which tonight's Fleet Ledger audit found cluttered (dead domains, a plaintext key, an exposed Postgres container, drifted config). This is a fresh start on that box for this project specifically — a new, separate service alongside whatever else runs there, sharing no code, config, or naming with it.
 - **Delegation split: by repo.** Claude Code (this session/future sessions) builds the backend repo — the architecturally load-bearing piece (the SSE contract, the tool-execution loop, OAuth). The Android app repo gets delegated to Codex or Cline, following the module plan below; Mason will assign the specific tool when that work starts.
 
-Working names (placeholders only — replace everywhere once Mason picks a real name): repos `assistant-backend` and `assistant-android`, Android package `com.mdyerapis.assistant`, backend domain `assistant.llmclouds.au` (a new, standalone Caddy site block on the VPS).
+Working names (placeholders only — replace everywhere once Mason picks a real name): repos `assistant-backend` and `assistant-android`, Android package `com.mdyerapis.sable`, backend domain `sable.llmclouds.au` (a new, standalone Caddy site block on the VPS).
 
 ---
 
@@ -60,7 +60,7 @@ assistant-backend/
   assistant.service            # systemd --user unit on the VPS, Restart=on-failure,
                                 # EnvironmentFile=%h/assistant.env (0600, never committed)
   Caddyfile.snippet            # standalone site block to append to the VPS's /etc/caddy/Caddyfile:
-                                # assistant.llmclouds.au { reverse_proxy localhost:<port> }
+                                # sable.llmclouds.au { reverse_proxy localhost:<port> }
 ```
 
 **API shape — single chat endpoint, backend-mediated, phone never talks to OpenAI or Google directly.** Tool execution needs server-held state (SQLite rows, OAuth refresh tokens, the OpenAI key) that must never live on the phone. `POST /v1/chat` takes `{conversation_id?: string, message: string}`, calls OpenAI with `stream=True` and the registered `tools=[...]`, executes any requested tool call server-side, feeds results back into the same turn, and streams `ChatEvent`-shaped SSE frames to the phone throughout: `delta`, `tool_call_started`, `tool_call_progress`, `tool_call_finished`, `message_completed`, `error`.
@@ -81,9 +81,9 @@ CREATE TABLE user_facts (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT); -- 
 ```
 Google tokens encrypted at the application layer (`cryptography.fernet`, keyed off an env secret) even though the DB lives on a server Mason controls — defense in depth against DB-file/backup leakage.
 
-**Google OAuth — backend-anchored, not phone-side PKCE.** Because tools execute backend-side and the backend already holds a confidential OAuth client (existing `client_secret_*.apps.googleusercontent.com.json`, GCP project `182773386348`), use a standard authorization-code flow with the client secret: phone launches a Custom Tab (never WebView) at `GET /oauth/google/start`, Google redirects to `/oauth/google/callback` (registered against `assistant.llmclouds.au`), backend exchanges the code, stores encrypted tokens, redirects the Custom Tab to `assistantapp://oauth-complete`. Reuse only the *shape* of encrypted/TTL'd/constant-time-compared CSRF `state` tracking for the redirect — not phone-side PKCE mechanics, which don't apply to a confidential-client flow.
+**Google OAuth — backend-anchored, not phone-side PKCE.** Because tools execute backend-side and the backend already holds a confidential OAuth client (existing `client_secret_*.apps.googleusercontent.com.json`, GCP project `182773386348`), use a standard authorization-code flow with the client secret: phone launches a Custom Tab (never WebView) at `GET /oauth/google/start`, Google redirects to `/oauth/google/callback` (registered against `sable.llmclouds.au`), backend exchanges the code, stores encrypted tokens, redirects the Custom Tab to `sableapp://oauth-complete`. Reuse only the *shape* of encrypted/TTL'd/constant-time-compared CSRF `state` tracking for the redirect — not phone-side PKCE mechanics, which don't apply to a confidential-client flow.
 
-**Manual prerequisite Mason does himself, start in parallel tonight:** in GCP project `182773386348`'s console, extend the OAuth consent screen for Calendar (`calendar.events` or narrower) and Gmail (read-only + send, not full mailbox) scopes, and add `https://assistant.llmclouds.au/oauth/google/callback` as an authorized redirect URI.
+**Manual prerequisite Mason does himself, start in parallel tonight:** in GCP project `182773386348`'s console, extend the OAuth consent screen for Calendar (`calendar.events` or narrower) and Gmail (read-only + send, not full mailbox) scopes, and add `https://sable.llmclouds.au/oauth/google/callback` as an authorized redirect URI.
 
 ---
 
@@ -144,7 +144,7 @@ assistant-android/
     .../App.kt                          # @HiltAndroidApp
     .../MainActivity.kt
     .../nav/AppNavHost.kt                # onboarding -> chat
-    AndroidManifest.xml                   # intent-filter assistantapp://oauth-complete
+    AndroidManifest.xml                   # intent-filter sableapp://oauth-complete
                                            # (unused in v1, reserved for phase 3)
 
   core/
@@ -213,7 +213,7 @@ Feature modules depend only on `core:*`/`backend-client`, never on each other.
 
 | Phase | What | Depends on |
 |---|---|---|
-| **0** | Backend skeleton on the VPS: rename the SSH alias to something neutral, empty FastAPI app, `/v1/health`, bearer auth, systemd unit, standalone Caddy site block + TLS, plus the Bitwarden sync script/timer (section 1.6) so `assistant.env` is populated by the vault from day one rather than hand-typed once and forgotten. Verify `curl -H "Authorization: Bearer <token>" https://assistant.llmclouds.au/v1/health` works. | Nothing — do this first |
+| **0** | Backend skeleton on the VPS: rename the SSH alias to something neutral, empty FastAPI app, `/v1/health`, bearer auth, systemd unit, standalone Caddy site block + TLS, plus the Bitwarden sync script/timer (section 1.6) so `assistant.env` is populated by the vault from day one rather than hand-typed once and forgotten. Verify `curl -H "Authorization: Bearer <token>" https://sable.llmclouds.au/v1/health` works. | Nothing — do this first |
 | **1** | **Chat loop end-to-end — the proof milestone.** Backend: `POST /v1/chat`, `tools/registry.py` + tier-1 memory (`user_facts`, `remember`/`forget`, injected into every system prompt) wired in from the start since it's cheap now and expensive to retrofit, streams OpenAI SSE straight through, persists to SQLite. Android: `app`, all `core:*`, `backend-client`, `feature:onboarding`, `feature:chat`. Sideload debug APK, paste token, send a message, watch it stream. | Phase 0 |
 | **1.5** | Tool-calling plumbing proof: register one trivial fake tool (`get_current_time`, no I/O) plus `remember`/`forget`, wire the execute-and-continue loop, confirm `ToolCallChip` renders on-device. Validates the whole tool-calling seam *and* tier-1 memory before real tools exist. | Phase 1 |
 | **2** | Reminders (pure backend logic, zero external dependency): `reminders` table + `create_reminder`/`list_reminders`/`cancel_reminder` tools. Fully testable via chat alone. | Phase 1.5 |
@@ -240,7 +240,7 @@ Feature modules depend only on `core:*`/`backend-client`, never on each other.
 
 ## Verification
 
-- **Phase 0:** `curl -H "Authorization: Bearer <token>" https://assistant.llmclouds.au/v1/health` returns 200 from both the laptop and the phone's mobile data (confirms it's genuinely internet-reachable, not just LAN).
+- **Phase 0:** `curl -H "Authorization: Bearer <token>" https://sable.llmclouds.au/v1/health` returns 200 from both the laptop and the phone's mobile data (confirms it's genuinely internet-reachable, not just LAN).
 - **Phase 1:** send a real chat message from the sideloaded Android app, confirm tokens stream into the UI in real time (not just as one final blob), confirm the conversation persists in the backend's SQLite (`sqlite3 app.db "select * from messages;"`) and in the app's Room DB.
 - **Phase 1.5:** ask the assistant "what time is it," confirm `ToolCallChip` shows "Calling get_current_time…" then "✓ done," and the model's final answer reflects the tool result. Separately: tell it "remember that I go by [name]," start a fresh conversation, and confirm it still knows without being told again — proves tier-1 memory injection is actually wired into the system prompt, not just the tool call succeeding in isolation.
 - **Phase 2:** "remind me to call the dentist tomorrow at 9am" → confirm a `reminders` row is created with the right `due_at`, and "what are my reminders" lists it back correctly.

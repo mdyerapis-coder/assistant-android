@@ -8,10 +8,10 @@ plugins {
     alias(libs.plugins.google.services)
 }
 android {
-    namespace = "com.mdyerapis.assistant"
+    namespace = "com.mdyerapis.sable"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.mdyerapis.assistant"
+        applicationId = "com.mdyerapis.sable"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

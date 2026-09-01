@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 android {
-    namespace = "com.mdyerapis.assistant.core.database"
+    namespace = "com.mdyerapis.sable.core.database"
     compileSdk = 35
     defaultConfig {
         minSdk = 26

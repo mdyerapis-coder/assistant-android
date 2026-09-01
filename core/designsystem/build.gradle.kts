@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 android {
-    namespace = "com.mdyerapis.assistant.core.designsystem"
+    namespace = "com.mdyerapis.sable.core.designsystem"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     compileOptions {
