@@ -545,7 +545,7 @@ open class ChatViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     chatState = _uiState.value.chatState.copy(
-                        error = "Connection error: ${e.message}",
+                        error = "Couldn't reach $baseUrl - check the server is running and reachable.",
                         isLoading = false,
                     ),
                     serverUnreachable = true,

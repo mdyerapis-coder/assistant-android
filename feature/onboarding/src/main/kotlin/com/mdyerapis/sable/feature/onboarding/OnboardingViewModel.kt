@@ -14,10 +14,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+/** Default backend — the hosted Sable instance. Editable at onboarding. */
+const val DEFAULT_BASE_URL = "https://sable.llmclouds.au"
+
 data class OnboardingUiState(
     val currentFrame: Int = 0, // 0-3: story frames + connect form
     val token: String = "",
-    val baseUrl: String = "",
+    val baseUrl: String = DEFAULT_BASE_URL,
     val isLoading: Boolean = false,
     val error: String? = null,
     val isDone: Boolean = false,
@@ -75,6 +78,13 @@ class OnboardingViewModel @Inject constructor(
                 if (healthy) {
                     tokenRepository.saveToken(state.token)
                     tokenRepository.saveBaseUrl(state.baseUrl)
+                    if (tokenRepository.getToken() == null) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Secure storage failed to persist the token. Try again.",
+                        )
+                        return@launch
+                    }
                     deviceTokenRegistrar.registerCurrentToken()
                     _uiState.value = _uiState.value.copy(isLoading = false, isDone = true)
                 } else {

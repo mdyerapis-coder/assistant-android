@@ -69,7 +69,10 @@ fun AppNavHost() {
         ) {
             ChatScreen(
                 onNavigateSettings = { navController.navigate("settings") },
-                onNavigateSessions = { navController.navigate("sessions") }
+                onNavigateSessions = { navController.navigate("sessions") },
+                onReconfigure = {
+                    navController.navigate("onboarding") { popUpTo(0) { inclusive = true } }
+                }
             )
         }
         composable(

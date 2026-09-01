@@ -51,6 +51,7 @@ import com.mdyerapis.sable.feature.localmodel.LocalModelState
 fun ChatScreen(
     onNavigateSettings: () -> Unit = {},
     onNavigateSessions: () -> Unit = {},
+    onReconfigure: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -293,7 +294,7 @@ fun ChatScreen(
                             androidx.compose.material3.TextButton(onClick = { viewModel.clearServerUnreachable() }) {
                                 androidx.compose.material3.Text("Retry")
                             }
-                            androidx.compose.material3.TextButton(onClick = { viewModel.reconfigureServer() }) {
+                            androidx.compose.material3.TextButton(onClick = { viewModel.reconfigureServer(); onReconfigure() }) {
                                 androidx.compose.material3.Text("Re-configure")
                             }
                         }
