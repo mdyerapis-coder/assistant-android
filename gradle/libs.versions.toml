@@ -19,6 +19,7 @@ playServicesAuth = "21.3.0"
 browserCustomTabs = "1.8.0"
 paparazzi = "1.3.5"
 tasksGenai = "0.10.35"
+chaquopy = "16.1.0"
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -70,3 +71,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 paparazzi = { id = "app.cash.paparazzi", version.ref = "paparazzi" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+chaquopy = { id = "com.chaquo.python", version.ref = "chaquopy" }

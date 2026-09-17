@@ -1,0 +1,46 @@
+# Chaquopy 16.1 pip — assembleFullDebug (intended Android-flavored set)
+
+Captured from `./gradlew :spikes:chaquopy-wheels:assembleFullDebug`
+on CPython 3.12.3 / Chaquopy 16.1.0 / AGP 8.7.3. Trimmed to the pip
+failure; full Gradle stack traces omitted.
+
+## 1. Backend constraints as written (`cryptography>=43`)
+
+Chaquopy has no Android wheel for cryptography>=43 (newest on pypi-13.1 is
+42.0.8), so pip downloaded the PyPI sdist and tried to build it:
+
+```
+Chaquopy: Installing for arm64-v8a
+Looking in indexes: https://pypi.org/simple, https://chaquo.com/pypi-13.1
+Collecting fastapi>=0.115
+Collecting uvicorn>=0.32
+Collecting aiosqlite>=0.20
+Collecting openai>=1.50
+Collecting cryptography>=43
+  Downloading cryptography-50.0.1.tar.gz (880 kB)
+  ...
+    FileNotFoundError: [Errno 2] No such file or directory: 'maturin'
+ERROR: Failed to install cryptography>=43 from
+  .../cryptography-50.0.1.tar.gz
+Chaquopy: Exit status 1
+```
+
+`generateFullDebugPythonRequirements` FAILED. BUILD FAILED.
+
+## 2. Same set after the only-available official pin (`cryptography==42.0.8`)
+
+One-shot (requirements file restored afterwards). Next native sdist:
+
+```
+Collecting cryptography==42.0.8   # Chaquopy android_24_arm64_v8a wheel — ok
+Collecting orjson>=3.12.0
+  Downloading orjson-3.12.0.tar.gz (4.1 MB)
+    FileNotFoundError: [Errno 2] No such file or directory: 'maturin'
+ERROR: Failed to install orjson>=3.12.0 from
+  .../orjson-3.12.0.tar.gz
+Chaquopy: Exit status 1
+```
+
+Chaquopy 16.1 will attempt to compile missing native packages from sdists
+(Rust/maturin). There is no Android cross-compile toolchain in this spike,
+and official wheels do not exist for orjson, pydantic-core>=2, or jiter.

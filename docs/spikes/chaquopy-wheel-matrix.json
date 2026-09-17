@@ -1,0 +1,389 @@
+{
+  "python": "3.12.3 (main, Mar 23 2026, 19:04:32) [GCC 13.3.0]",
+  "target": {
+    "python": "312",
+    "platform": "android_24_arm64_v8a",
+    "implementation": "cp"
+  },
+  "indexes": {
+    "official": [
+      "https://pypi.org/simple",
+      "https://chaquo.com/pypi-13.1"
+    ],
+    "workaround": [
+      "https://pypi.flet.dev"
+    ]
+  },
+  "official": [
+    {
+      "name": "fastapi",
+      "requirement": "fastapi>=0.115",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "fastapi-0.141.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pydantic",
+      "requirement": "pydantic>=2.9",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "pydantic-2.13.5-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pydantic-core",
+      "requirement": "pydantic-core>=2",
+      "blocking": true,
+      "status": "fail",
+      "wheel": null,
+      "error": "ERROR: No matching distribution found for pydantic-core>=2",
+      "source": "chaquopy+pypi",
+      "notes": null
+    },
+    {
+      "name": "cryptography",
+      "requirement": "cryptography>=43",
+      "blocking": true,
+      "status": "fail",
+      "wheel": null,
+      "error": "ERROR: No matching distribution found for cryptography>=43",
+      "source": "chaquopy+pypi",
+      "notes": null
+    },
+    {
+      "name": "cryptography (flavor pin 42.0.8)",
+      "requirement": "cryptography==42.0.8",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "cryptography-42.0.8-0-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "orjson",
+      "requirement": "orjson>=3.12.0",
+      "blocking": true,
+      "status": "fail",
+      "wheel": null,
+      "error": "ERROR: No matching distribution found for orjson>=3.12.0",
+      "source": "chaquopy+pypi",
+      "notes": null
+    },
+    {
+      "name": "aiohttp",
+      "requirement": "aiohttp>=3.9",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "aiohttp-3.10.10-0-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "aiosqlite",
+      "requirement": "aiosqlite>=0.20",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "aiosqlite-0.22.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "uvicorn",
+      "requirement": "uvicorn>=0.32",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "uvicorn-0.53.0-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "openai",
+      "requirement": "openai>=1.50",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "openai-3.14.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "jiter (openai dep)",
+      "requirement": "jiter>=0.4.0",
+      "blocking": true,
+      "status": "fail",
+      "wheel": null,
+      "error": "ERROR: No matching distribution found for jiter>=0.4.0",
+      "source": "chaquopy+pypi",
+      "notes": null
+    },
+    {
+      "name": "httpx",
+      "requirement": "httpx>=0.27",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "httpx-0.28.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "google-auth",
+      "requirement": "google-auth>=2.57.0",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "google_auth-2.58.0-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "google-auth-oauthlib",
+      "requirement": "google-auth-oauthlib>=1.2",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "google_auth_oauthlib-1.4.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "requests",
+      "requirement": "requests>=2.34.2",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "requests-2.34.2-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pyyaml",
+      "requirement": "pyyaml>=6.0.3",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "pyyaml-6.0.3-0-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "croniter",
+      "requirement": "croniter>=1.0",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "croniter-6.2.4-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi",
+      "notes": "abi=none"
+    }
+  ],
+  "flet_workaround": [
+    {
+      "name": "fastapi",
+      "requirement": "fastapi>=0.115",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "fastapi-0.141.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pydantic",
+      "requirement": "pydantic>=2.9",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "pydantic-2.13.5-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pydantic-core",
+      "requirement": "pydantic-core>=2",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "pydantic_core-2.47.0-10-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "cryptography",
+      "requirement": "cryptography>=43",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "cryptography-43.0.1-10-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "cryptography (flavor pin 42.0.8)",
+      "requirement": "cryptography==42.0.8",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "cryptography-42.0.8-0-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "orjson",
+      "requirement": "orjson>=3.12.0",
+      "blocking": true,
+      "status": "fail",
+      "wheel": null,
+      "error": "ERROR: No matching distribution found for orjson>=3.12.0",
+      "source": "chaquopy+pypi+flet",
+      "notes": null
+    },
+    {
+      "name": "aiohttp",
+      "requirement": "aiohttp>=3.9",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "aiohttp-3.14.0-1-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "aiosqlite",
+      "requirement": "aiosqlite>=0.20",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "aiosqlite-0.22.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "uvicorn",
+      "requirement": "uvicorn>=0.32",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "uvicorn-0.53.0-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "openai",
+      "requirement": "openai>=1.50",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "openai-3.14.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "jiter (openai dep)",
+      "requirement": "jiter>=0.4.0",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "jiter-0.15.0-1-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "httpx",
+      "requirement": "httpx>=0.27",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "httpx-0.28.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "google-auth",
+      "requirement": "google-auth>=2.57.0",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "google_auth-2.58.0-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "google-auth-oauthlib",
+      "requirement": "google-auth-oauthlib>=1.2",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "google_auth_oauthlib-1.4.1-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "requests",
+      "requirement": "requests>=2.34.2",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "requests-2.34.2-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    },
+    {
+      "name": "pyyaml",
+      "requirement": "pyyaml>=6.0.3",
+      "blocking": true,
+      "status": "ok",
+      "wheel": "pyyaml-6.0.3-1-cp312-cp312-android_24_arm64_v8a.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=cp312"
+    },
+    {
+      "name": "croniter",
+      "requirement": "croniter>=1.0",
+      "blocking": false,
+      "status": "ok",
+      "wheel": "croniter-6.2.4-py3-none-any.whl",
+      "error": null,
+      "source": "chaquopy+pypi+flet",
+      "notes": "abi=none"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "firebase-admin",
+      "status": "skipped",
+      "reason": "dropped per ADR-012 (FCM redesign)"
+    },
+    {
+      "name": "mcp",
+      "status": "skipped",
+      "reason": "stdio MCP cannot spawn on Android; skipped this spike"
+    },
+    {
+      "name": "uvloop",
+      "status": "skipped",
+      "reason": "dropped with uvicorn[standard]"
+    },
+    {
+      "name": "httptools",
+      "status": "skipped",
+      "reason": "dropped with uvicorn[standard]"
+    },
+    {
+      "name": "watchfiles",
+      "status": "skipped",
+      "reason": "dropped with uvicorn[standard]"
+    }
+  ],
+  "option_a_official_wheels": "no-go"
+}

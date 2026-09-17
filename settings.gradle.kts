@@ -26,3 +26,5 @@ include(":backend-client")
 include(":feature:onboarding")
 include(":feature:chat")
 include(":feature:localmodel")
+// Isolated ADR-012 wheel spike. Not a product dependency of :app.
+include(":spikes:chaquopy-wheels")
