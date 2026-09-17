@@ -17,9 +17,9 @@ SMS) are out of scope.
 | Check | Command | What it proves |
 |---|---|---|
 | Per-package resolve | `python3 spikes/chaquopy-wheels/scripts/probe_wheels.py` | pip can/cannot download an `cp312` / `android_24_arm64_v8a` wheel from PyPI + [Chaquopy pypi-13.1](https://chaquo.com/pypi-13.1/) |
-| Chaquopy pip (resolved set) | `./gradlew :spikes:chaquopy-wheels:assembleResolvedDebug` | the Gradle plugin actually installs the packages that resolved |
-| Chaquopy pip (intended set) | `./gradlew :spikes:chaquopy-wheels:assembleFullDebug` | the Android-flavored backend requirements either install or fail as a set |
-| On-device import | install the `resolved` APK, read logcat `ChaquopySpike` | native `.so` files load in Chaquopy's CPython, not just resolve |
+| Chaquopy pip (resolved set) | `./gradlew :spikes:chaquopy-wheels:assembleResolvedDebug` | **SUCCESS** — plugin installed the packages that resolved |
+| Chaquopy pip (intended set) | `./gradlew :spikes:chaquopy-wheels:assembleFullDebug` | **FAILED** — `cryptography>=43` sdist (`maturin` missing); after pin, `orjson>=3.12.0` sdist |
+| On-device import | install the `resolved` APK, read logcat `ChaquopySpike` | **not run** (no emulator/device in this environment) |
 
 Machine used for the resolve probe: CPython 3.12.3 on Linux x86_64. Chaquopy
 **16.1.0**, app Python **3.12**, ABIs `arm64-v8a` + `x86_64`, AGP 8.7.3.
@@ -109,31 +109,62 @@ httpx>=0.27
 
 ## APK size delta
 
-Measured from this spike module (Chaquopy 16.1, Python 3.12, ABIs
-`arm64-v8a` + `x86_64`), not from the product `:app` APK.
+Measured from this spike module (Chaquopy 16.1, Python 3.12, **two** ABIs
+`arm64-v8a` + `x86_64`, debug, unsigned). Not the product `:app` APK
+(that build needs `google-services.json`, which is not in this repo).
 
-| Variant | Gradle task | APK size | Delta vs empty |
+| Variant | Gradle task | APK | Delta vs empty |
 |---|---|---|---|
-| empty (interpreter only) | `:spikes:chaquopy-wheels:assembleEmptyDebug` | *pending Gradle assemble* | — |
-| resolved wheels | `:spikes:chaquopy-wheels:assembleResolvedDebug` | *pending Gradle assemble* | *pending* |
-| full intended set | `:spikes:chaquopy-wheels:assembleFullDebug` | expected fail | — |
+| empty (interpreter + stdlib only) | `:spikes:chaquopy-wheels:assembleEmptyDebug` | **37.17 MiB** (38,978,700 bytes) | — |
+| resolved wheels | `:spikes:chaquopy-wheels:assembleResolvedDebug` | **44.59 MiB** (46,754,704 bytes) | **+7.42 MiB** |
+| full intended set | `:spikes:chaquopy-wheels:assembleFullDebug` | did not package | pip failed (see below) |
 
-The product app was not rebuilt here (needs `google-services.json`). ADR-012's
-"~40–80 MB extra" remains the planning number until the empty/resolved APKs
-are weighed.
+Inside the resolved APK, Chaquopy packed native requirements as
+`assets/chaquopy/requirements-{arm64-v8a,common,x86_64}.imy` (~7.4 MiB
+uncompressed), which matches the empty→resolved delta. The interpreter
+itself is the expensive part: `libpython3.12.so` is ~6.4 MiB **per ABI**,
+plus OpenSSL/SQLite stubs. An arm64-only production flavor would drop
+roughly one ABI's native payload (~12 MiB uncompressed `.so`s plus ~1.5 MiB
+x86_64 requirement/stdlib imys) — still tens of MB, in the same band as
+ADR-012's "40–80 MB extra" once you add the product app's existing 125 MB.
 
 ## Chaquopy Gradle evidence
 
-*Pending first `assembleResolvedDebug` / `assembleFullDebug` on this branch.
-The module is wired; logs will be pasted here after the build.*
+**Resolved set: BUILD SUCCESSFUL** (`assembleResolvedDebug`, 2m 11s).
+Chaquopy pip used `https://pypi.org/simple` + `https://chaquo.com/pypi-13.1`
+and installed for both ABIs. Native wheels that actually came from Chaquopy:
 
-Reproduce:
+- `cryptography==42.0.8` (`android_24_arm64_v8a` / `android_24_x86_64`)
+- `aiohttp==3.10.10`
+- `cffi==1.17.1`, `chaquopy-libffi`, `chaquopy-libyaml`
+- `pyyaml==6.0.3`
+- `frozenlist==1.4.0`, `multidict==6.0.4`
 
-```bash
-# SDK 35 + build-tools 35.0.0, JDK 17+, Python 3.12 on PATH
-./gradlew :spikes:chaquopy-wheels:assembleResolvedDebug
-./gradlew :spikes:chaquopy-wheels:assembleFullDebug   # expected failure
-```
+Pure-Python (PyPI `py3-none-any`) that rode along: uvicorn 0.53.0,
+aiosqlite 0.22.1, google-auth 2.58.0, google-auth-oauthlib 1.4.1,
+requests 2.34.2, httpx 0.28.1, croniter 6.2.4, plus their pure-Python deps.
+
+**Intended set: BUILD FAILED** (`assembleFullDebug`). Log:
+[`chaquopy-full-pip.txt`](./chaquopy-full-pip.txt).
+
+1. `cryptography>=43` → pip selected **cryptography-50.0.1.tar.gz** (no
+   Android wheel) → `FileNotFoundError: maturin`.
+2. After a one-shot pin to `cryptography==42.0.8` (file restored; not
+   committed) → `orjson>=3.12.0` selected **orjson-3.12.0.tar.gz** → same
+   maturin failure.
+
+Chaquopy 16.1 does **not** use `--only-binary`, so missing native wheels
+become failed source builds rather than a clean "no matching distribution".
+Either way the intended stack does not install.
+
+**On-device import:** not run. This environment has no Android emulator or
+arm64 device. The `resolved` APK *packages* the native `.so`s (cryptography,
+aiohttp, cffi, pyyaml, …) and the activity will execute
+`wheel_import_check.run()` on launch (logcat tag `ChaquopySpike`). Until that
+APK is opened on hardware, do not claim those native modules import; only
+that Chaquopy resolved and packaged them for `android_24_arm64_v8a`.
+Hard-checklist packages that were **not** packaged (`fastapi`/`pydantic` via
+pydantic-core, `orjson`) would `ModuleNotFoundError` in that same check.
 
 ## Go / no-go
 
