@@ -17,6 +17,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        # Spike is an isolated Chaquopy app with product flavors; do not
+        # require its Python wheel resolve on every product CI run.
+        run: ./gradlew testDebugUnitTest -x :spikes:chaquopy-wheels:testDebugUnitTest
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug

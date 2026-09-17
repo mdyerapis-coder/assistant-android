@@ -1,0 +1,17 @@
+# Packages that resolved as Android wheels (or py3-none-any) from PyPI +
+# Chaquopy's official index (https://chaquo.com/pypi-13.1/) for
+# CPython 3.12 / android_24_arm64_v8a.
+#
+# Omitted on purpose (no official Chaquopy/PyPI Android wheel):
+#   fastapi, pydantic, pydantic-core>=2, orjson, openai (needs jiter)
+#   cryptography>=43 (only 42.0.8 exists on the Chaquopy index)
+uvicorn>=0.32
+aiosqlite>=0.20
+cryptography==42.0.8
+google-auth>=2.57.0
+google-auth-oauthlib>=1.2
+requests>=2.34.2
+aiohttp>=3.9
+pyyaml>=6.0.3
+croniter>=1.0
+httpx>=0.27
