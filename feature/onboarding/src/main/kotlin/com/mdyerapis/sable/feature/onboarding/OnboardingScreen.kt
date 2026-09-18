@@ -331,7 +331,7 @@ private fun ConnectForm(
                     Text("Continue on-device without the server")
                 }
                 Text(
-                    "On-device chat uses MediaPipe on this phone. Calendar, Gmail, and reminders still need the cloud assistant — no Google client_secret is stored here.",
+                    "On-device chat uses MediaPipe on this phone. Local reminders fire here with WorkManager. Calendar and Gmail still need the cloud assistant — no Google client_secret is stored here.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -110,7 +110,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (uiState.appModelMode == AppModelMode.OnDevice) {
-                        "MediaPipe on this phone. A reduced assistant: chat only, no tool loop."
+                        "MediaPipe on this phone. Chat plus local reminders (WorkManager). Calendar and Gmail stay on the O1 relay."
                     } else {
                         "Remote FastAPI SSE at assistant.llmclouds.au — tools, Google, reminders."
                     },
@@ -578,7 +578,7 @@ private fun OnDeviceLimitsCard() {
             )
             LimitRow("Chat (MediaPipe)", "Works offline after the model is downloaded.")
             LimitRow("Google Calendar / Gmail", "O1: thin OAuth relay on assistant.llmclouds.au. No client_secret on the phone.")
-            LimitRow("Reminders", "Create/list still need the cloud tool loop. P1: WorkManager + local notifications when offline.")
+            LimitRow("Reminders", "P1: create/list/cancel in local SQLite; due-time delivery via WorkManager + NotificationManager. Cloud mode still uses FCM from the VPS.")
             LimitRow("SMS", "P2: in-process when tools run on-device. Today this is an FCM relay through the backend.")
         }
     }

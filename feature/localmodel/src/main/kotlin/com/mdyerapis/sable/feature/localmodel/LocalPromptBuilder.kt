@@ -3,19 +3,20 @@ package com.mdyerapis.sable.feature.localmodel
 import com.mdyerapis.sable.core.model.ChatMessage
 
 /**
- * Builds a single prompt string for MediaPipe. The on-device engine has
- * no tool loop, so the system preamble is explicit about what it cannot
- * do — calendar/email/reminders/SMS stay on the hosted backend.
+ * Builds a single prompt string for MediaPipe. Calendar, Gmail, and SMS
+ * stay on the hosted backend. On-device reminders are handled before
+ * this prompt is built (P1) — do not invent extra ones.
  */
 object LocalPromptBuilder {
     const val SYSTEM_PREAMBLE: String =
         "You are Sable, a personal assistant running entirely on this phone. " +
             "You can chat, draft text, and reason about what the user types. " +
-            "You cannot call tools, access the internet, read Gmail or Calendar, " +
-            "create reminders, or send SMS while on-device. " +
-            "If the user asks you to do those things, say so plainly and tell them " +
-            "to switch to Cloud Assistant. Do not invent calendar events, emails, " +
-            "or reminder confirmations."
+            "On-device reminders are created by the app itself when the user says " +
+            "“remind me …” with a time — you will not see those turns. " +
+            "You cannot access the internet, read Gmail or Calendar, or send SMS. " +
+            "If the user asks for calendar, email, or SMS, say so plainly and tell " +
+            "them to switch to Cloud Assistant. Do not invent calendar events, emails, " +
+            "or extra reminder confirmations."
 
     private const val HISTORY_CAP = 20
 

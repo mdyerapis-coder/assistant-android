@@ -38,6 +38,7 @@ class LocalChatTransportTest {
         val transport = LocalChatTransport(LlmInferenceService(context, repo), repo)
         assertEquals(TransportCapabilities.ON_DEVICE, transport.capabilities)
         assertTrue(transport.capabilities.offline)
+        assertTrue(transport.capabilities.reminders)
         assertTrue(!transport.capabilities.tools)
         assertTrue(!transport.capabilities.google)
     }
@@ -49,6 +50,39 @@ class LocalChatTransportTest {
         val error = events.single() as ChatEvent.Error
         assertTrue(error.message.contains("not installed"))
         assertTrue(error.retryable)
+    }
+
+    @Test
+    fun reminderCreateWorksWithoutModelWeights() = runTest {
+        val store = GatewayStore()
+        val scheduler = GatewayScheduler()
+        val transport = LocalChatTransport(
+            LlmInferenceService(context, repo),
+            repo,
+            DefaultLocalReminderGateway(store, scheduler),
+        )
+        val events = transport.stream(
+            ChatTurnRequest(message = "Remind me to stretch in 30 minutes", conversationId = "local:1"),
+        ).toList()
+        assertTrue(events.any { it is ChatEvent.ToolCallStarted && it.name == "create_reminder" })
+        assertTrue(events.any { it is ChatEvent.MessageCompleted })
+        assertEquals(1, scheduler.scheduled.size)
+        assertTrue(events.none { it is ChatEvent.Error })
+    }
+
+    @Test
+    fun calendarWithoutModelIsHonestNotInstalledError() = runTest {
+        val transport = LocalChatTransport(
+            LlmInferenceService(context, repo),
+            repo,
+            DefaultLocalReminderGateway(GatewayStore(), GatewayScheduler()),
+        )
+        val events = transport.stream(
+            ChatTurnRequest(message = "what's on my calendar?", conversationId = "local:1"),
+        ).toList()
+        val error = events.single() as ChatEvent.Error
+        assertTrue(error.message.contains("not installed"))
+        assertTrue(events.none { it is ChatEvent.ToolCallStarted })
     }
 
     @Test
@@ -130,5 +164,25 @@ class LocalChatTransportTest {
     private class TestContext(private val baseDir: File, private val prefs: SharedPreferences) : ContextWrapper(null) {
         override fun getFilesDir(): File = baseDir
         override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = prefs
+    }
+
+    private class GatewayStore : com.mdyerapis.sable.core.database.reminder.ReminderStore {
+        private val rows = LinkedHashMap<String, com.mdyerapis.sable.core.database.reminder.LocalReminder>()
+        override suspend fun insert(reminder: com.mdyerapis.sable.core.database.reminder.LocalReminder) {
+            rows[reminder.id] = reminder
+        }
+        override suspend fun get(id: String) = rows[id]
+        override suspend fun listPending() = rows.values.filter { it.isPending }.sortedBy { it.dueAtMillis }
+        override suspend fun listAll() = rows.values.toList()
+        override suspend fun markFired(id: String, nowMillis: Long): Boolean = false
+        override suspend fun markCancelled(id: String): Boolean = false
+    }
+
+    private class GatewayScheduler : com.mdyerapis.sable.core.database.reminder.ReminderScheduler {
+        val scheduled = mutableListOf<com.mdyerapis.sable.core.database.reminder.LocalReminder>()
+        override fun schedule(reminder: com.mdyerapis.sable.core.database.reminder.LocalReminder) {
+            scheduled += reminder
+        }
+        override fun cancel(id: String) {}
     }
 }

@@ -11,19 +11,43 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * On-device path: MediaPipe tokens mapped onto the same [ChatEvent]
- * vocabulary as the remote SSE loop. Never emits tool_call_* — there
- * is no tool executor in-process (ADR-012 Option C, not B).
+ * On-device path: local reminder intents (P1) plus MediaPipe tokens,
+ * both mapped onto [ChatEvent]s. Reminder create/list/cancel does not
+ * need downloaded weights. There is still no calendar/gmail/SMS loop.
  */
 @Singleton
 class LocalChatTransport @Inject constructor(
     private val inference: LlmInferenceService,
     private val models: LocalModelRepository,
+    private val reminders: LocalReminderGateway,
 ) : ChatTransport {
+    constructor(
+        inference: LlmInferenceService,
+        models: LocalModelRepository,
+    ) : this(inference, models, NoOpLocalReminderGateway)
+
     override val capabilities: TransportCapabilities = TransportCapabilities.ON_DEVICE
 
     override fun stream(request: ChatTurnRequest): Flow<ChatEvent> = channelFlow {
         val convId = request.conversationId?.takeIf { it.isNotBlank() } ?: "local"
+        val reminderEvents = try {
+            reminders.handle(request.message, convId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            listOf(
+                ChatEvent.Error(
+                    conversationId = convId,
+                    message = e.message ?: "On-device reminder failed",
+                    retryable = true,
+                ),
+            )
+        }
+        if (reminderEvents != null) {
+            reminderEvents.forEach { send(it) }
+            return@channelFlow
+        }
+
         if (models.state.value !is LocalModelState.Ready) {
             send(
                 ChatEvent.Error(

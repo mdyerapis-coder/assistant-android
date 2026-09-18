@@ -1,8 +1,9 @@
 package com.mdyerapis.sable.feature.chat
 
-import android.widget.Toast
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
@@ -97,6 +98,21 @@ fun ChatScreen(
             voiceController.startListening { recognized ->
                 inputText = recognized
             }
+        }
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* local reminders silently no-op if the user declines */ }
+
+    LaunchedEffect(uiState.appModelMode) {
+        if (uiState.appModelMode != AppModelMode.OnDevice) return@LaunchedEffect
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -303,7 +319,11 @@ fun ChatScreen(
                     }
                 },
                 enabled = true,
-                placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) "Message local model..." else "Ask assistant...",
+                placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) {
+                    "Chat or set a reminder..."
+                } else {
+                    "Ask assistant..."
+                },
                 isStreaming = uiState.chatState.isLoading,
                 onStop = { viewModel.stopGenerating() },
                 modifier = Modifier.imePadding(),
@@ -438,7 +458,7 @@ fun ChatScreen(
                                 )
                                 Text(
                                     text = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                                        "Private on-device chat. Calendar, Gmail, and reminders still need the cloud assistant."
+                                        "Private on-device chat and local reminders. Calendar, Gmail, and SMS still need the cloud assistant."
                                     } else {
                                         "Ask anything or check calendar, email, and reminders"
                                     },
@@ -457,8 +477,8 @@ fun ChatScreen(
                                 val suggestions = if (uiState.appModelMode == AppModelMode.OnDevice) {
                                     listOf(
                                         "Say hello" to "Say hello and introduce yourself!",
-                                        "Write a haiku" to "Write a haiku about technology.",
-                                        "Explain quantum computing" to "Explain quantum computing in simple terms.",
+                                        "Remind me" to "Remind me to stretch in 30 minutes",
+                                        "My reminders" to "what are my reminders",
                                     )
                                 } else {
                                     listOf(
@@ -611,9 +631,9 @@ internal fun OnDeviceCapabilityBanner(hasCloudSession: Boolean) {
             )
             Text(
                 if (hasCloudSession) {
-                    "Calendar, Gmail, and reminders still run on the cloud assistant (O1 Google relay). SMS on-device is not built yet (P2)."
+                    "Reminders fire on this phone (WorkManager, no FCM). Calendar and Gmail still run on the cloud assistant (O1 Google relay). SMS on-device is not built yet (P2)."
                 } else {
-                    "Calendar, Gmail, reminders, and SMS need the cloud assistant. Connect a bearer token when you want tools; the phone never holds a Google client_secret."
+                    "Reminders fire on this phone (WorkManager + a local notification). Calendar, Gmail, and SMS need the cloud assistant. Connect a bearer token when you want those; the phone never holds a Google client_secret."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,

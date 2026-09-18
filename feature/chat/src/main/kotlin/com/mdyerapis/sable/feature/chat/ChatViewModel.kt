@@ -20,6 +20,8 @@ import com.mdyerapis.sable.feature.localmodel.LocalChatTransport
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
+import com.mdyerapis.sable.feature.localmodel.LocalReminderGateway
+import com.mdyerapis.sable.feature.localmodel.NoOpLocalReminderGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,7 @@ open class ChatViewModel @Inject constructor(
     private val llmInferenceService: LlmInferenceService,
     private val conversationStore: ConversationStore,
     private val externalIntake: ExternalIntake,
+    private val localReminderGateway: LocalReminderGateway = NoOpLocalReminderGateway,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -56,7 +59,11 @@ open class ChatViewModel @Inject constructor(
 
     private var apiClient: ChatApiClient? = null
     private var remoteTransport: ChatTransport? = null
-    private val localTransport = LocalChatTransport(llmInferenceService, localModelRepository)
+    private val localTransport = LocalChatTransport(
+        llmInferenceService,
+        localModelRepository,
+        localReminderGateway,
+    )
     private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null
 
@@ -547,16 +554,6 @@ open class ChatViewModel @Inject constructor(
         }
 
         val onDevice = _uiState.value.appModelMode == AppModelMode.OnDevice
-        if (onDevice && localModelRepository.state.value !is LocalModelState.Ready) {
-            _uiState.value = _uiState.value.copy(
-                chatState = currentState.copy(
-                    error = "Local model is not installed. Please download one from model settings.",
-                    isLoading = false,
-                ),
-                showLocalModelDialog = true,
-            )
-            return
-        }
 
         val transport = resolveTransport()
         if (transport == null) {
@@ -598,9 +595,13 @@ open class ChatViewModel @Inject constructor(
                 transport.stream(request).collect { event ->
                     state = ChatReducer.reduce(state, event)
                     val unreachable = event is ChatEvent.Error && event.retryable && !onDevice
+                    val needsDownload = onDevice &&
+                        event is ChatEvent.Error &&
+                        event.message.contains("not installed", ignoreCase = true)
                     _uiState.value = _uiState.value.copy(
                         chatState = state,
                         serverUnreachable = if (unreachable) true else _uiState.value.serverUnreachable,
+                        showLocalModelDialog = _uiState.value.showLocalModelDialog || needsDownload,
                     )
                     if (event is ChatEvent.Delta && !onDevice) {
                         _uiState.value = _uiState.value.copy(serverUnreachable = false)

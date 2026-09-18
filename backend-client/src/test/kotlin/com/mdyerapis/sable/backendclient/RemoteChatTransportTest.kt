@@ -32,6 +32,8 @@ class RemoteChatTransportTest {
         assertEquals(TransportCapabilities.CLOUD, transport.capabilities)
         assertTrue(transport.capabilities.tools)
         assertTrue(transport.capabilities.google)
+        assertTrue(transport.capabilities.reminders)
+        assertTrue(!transport.capabilities.offline)
     }
 
     @Test

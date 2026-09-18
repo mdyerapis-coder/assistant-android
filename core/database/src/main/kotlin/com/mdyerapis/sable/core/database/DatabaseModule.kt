@@ -4,6 +4,8 @@ import android.content.Context
 import com.mdyerapis.sable.core.database.chat.ChatDatabase
 import com.mdyerapis.sable.core.database.chat.ConversationRepository
 import com.mdyerapis.sable.core.database.chat.ConversationStore
+import com.mdyerapis.sable.core.database.reminder.ReminderStore
+import com.mdyerapis.sable.core.database.reminder.RoomReminderStore
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -32,4 +34,8 @@ abstract class ConversationStoreModule {
     @Binds
     @Singleton
     abstract fun bindConversationStore(impl: ConversationRepository): ConversationStore
+
+    @Binds
+    @Singleton
+    abstract fun bindReminderStore(impl: RoomReminderStore): ReminderStore
 }
