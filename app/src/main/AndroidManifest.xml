@@ -14,7 +14,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Sable"
+        android:label="Assistant"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
@@ -27,7 +27,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Reserved for phase 03 Google OAuth deep-link return -->
+            <!-- Backend oauth_google.py DEEPLINK_SCHEME/HOST: assistantapp://oauth-complete -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="assistantapp" android:host="oauth-complete" />
+            </intent-filter>
+            <!-- Alias: historical sableapp scheme so old docs/bookmarks still land -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -74,6 +81,14 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.mdyerapis.sable.reminders.ACTION_DUE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".automations.AutomationAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mdyerapis.sable.automations.ACTION_DUE" />
             </intent-filter>
         </receiver>
 

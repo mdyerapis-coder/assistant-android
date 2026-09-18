@@ -110,7 +110,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (uiState.appModelMode == AppModelMode.OnDevice) {
-                        "MediaPipe on this phone. Chat, local reminders (WorkManager), and in-process SMS. Calendar and Gmail matching turns go to the O1 relay at ${uiState.oauthRelayUrl}."
+                        "MediaPipe on this phone. Chat, local reminders, recurring automations (WorkManager), and in-process SMS. Calendar and Gmail matching turns go to the O1 relay at ${uiState.oauthRelayUrl}."
                     } else {
                         "Remote FastAPI SSE — tools, Google, reminders. Google OAuth still uses ${uiState.oauthRelayUrl}."
                     },
@@ -380,7 +380,7 @@ fun SettingsScreen(
                         if (uiState.providerStatuses.isEmpty()) {
                             Text("Provider registry unavailable", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "Your Sable server is unreachable or too old for /v1/providers.",
+                                "Your assistant server is unreachable or too old for /v1/providers.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -466,7 +466,7 @@ fun SettingsScreen(
                             shape = RoundedCornerShape(16.dp),
                         )
                         Text(
-                            "Calendar and Gmail Custom Tabs always open this host’s /oauth/google/start, even when chat is on-device. Deep link stays sableapp://oauth-complete. Paste a bearer once for Google if you skipped cloud onboarding.",
+                            "Calendar and Gmail Custom Tabs always open this host’s /oauth/google/start, even when chat is on-device. The app returns on assistantapp://oauth-complete (sableapp:// still works). Paste a bearer once for Google if you skipped cloud onboarding.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -535,7 +535,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Sable", style = MaterialTheme.typography.titleSmall)
+                        Text("Assistant", style = MaterialTheme.typography.titleSmall)
                         val aboutContext = androidx.compose.ui.platform.LocalContext.current
                         val appVersion = remember {
                             try {
@@ -606,6 +606,7 @@ private fun OnDeviceLimitsCard() {
             LimitRow("Chat (MediaPipe)", "Works offline after the model is downloaded.")
             LimitRow("Google Calendar / Gmail", "O1 hybrid: Custom Tab + calendar/email turns hit the OAuth relay (default assistant.llmclouds.au). Refresh tokens stay on the VPS. No client_secret on the phone.")
             LimitRow("Reminders", "P1: create/list/cancel in local SQLite; due-time delivery via WorkManager + NotificationManager. Cloud mode still uses FCM from the VPS.")
+            LimitRow("Automations", "P1: create/list/cancel recurring local notifications (every N minutes/hours, daily, weekdays, weekly). Monthly/cron-tool actions are unsupported here — switch to Cloud Assistant for server croniter + FCM.")
             LimitRow("SMS", "P2: send/read via Android SmsManager and the SMS inbox on this phone. Cloud mode still uses the FCM relay + POST /v1/sms/results.")
         }
     }

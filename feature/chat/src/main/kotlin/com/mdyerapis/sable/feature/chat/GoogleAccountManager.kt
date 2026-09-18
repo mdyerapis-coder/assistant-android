@@ -22,7 +22,8 @@ import javax.inject.Singleton
  *
  * The relay handles all the OAuth dance (see docs/adr/007); the phone
  * just opens a Custom Tab at /oauth/google/start and gets deep-linked
- * back via sableapp://oauth-complete when the flow finishes.
+ * back via assistantapp://oauth-complete (sableapp:// alias also accepted)
+ * when the flow finishes.
  * The Google client_secret never lives in this APK.
  */
 @Singleton
@@ -65,7 +66,8 @@ open class GoogleAccountManager @Inject constructor(
     /**
      * Launch the OAuth flow in a Chrome Custom Tab. The relay redirects
      * to Google's consent screen, then back to /oauth/google/callback,
-     * which itself redirects to sableapp://oauth-complete.
+     * which itself redirects to assistantapp://oauth-complete
+     * (legacy sableapp://oauth-complete is still accepted).
      *
      * Note: we launch from the Application context with FLAG_ACTIVITY_NEW_TASK
      * because this is called from a ViewModel that doesn't hold an Activity
@@ -96,6 +98,6 @@ open class GoogleAccountManager @Inject constructor(
     }
 
     companion object {
-        const val OAUTH_COMPLETE_URI: String = "sableapp://oauth-complete"
+        const val OAUTH_COMPLETE_URI: String = OAuthCompleteLinks.URI
     }
 }

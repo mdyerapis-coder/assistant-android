@@ -11,11 +11,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * On-device path: local reminder intents (P1), in-process SMS (P2),
- * hybrid Google via the O1 OAuth relay, then MediaPipe tokens — all
- * mapped onto [ChatEvent]s. Reminder/SMS turns do not need downloaded
- * weights. Calendar / Gmail matching turns POST `/v1/chat` to the relay;
- * they never see a refresh token or `client_secret`.
+ * On-device path: local reminder/automation intents (P1), in-process SMS
+ * (P2), hybrid Google via the O1 OAuth relay, then MediaPipe tokens —
+ * all mapped onto [ChatEvent]s. Reminder/automation/SMS turns do not
+ * need downloaded weights. Calendar / Gmail matching turns POST
+ * `/v1/chat` to the relay; they never see a refresh token or
+ * `client_secret`.
  */
 @Singleton
 class LocalChatTransport @Inject constructor(
@@ -24,31 +25,69 @@ class LocalChatTransport @Inject constructor(
     private val reminders: LocalReminderGateway,
     private val google: LocalGoogleGateway,
     private val sms: LocalSmsGateway,
+    private val automations: LocalAutomationGateway,
 ) : ChatTransport {
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
-    ) : this(inference, models, NoOpLocalReminderGateway, NoOpLocalGoogleGateway, NoOpLocalSmsGateway)
+    ) : this(
+        inference,
+        models,
+        NoOpLocalReminderGateway,
+        NoOpLocalGoogleGateway,
+        NoOpLocalSmsGateway,
+        NoOpLocalAutomationGateway,
+    )
 
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
         reminders: LocalReminderGateway,
-    ) : this(inference, models, reminders, NoOpLocalGoogleGateway, NoOpLocalSmsGateway)
+    ) : this(
+        inference,
+        models,
+        reminders,
+        NoOpLocalGoogleGateway,
+        NoOpLocalSmsGateway,
+        NoOpLocalAutomationGateway,
+    )
 
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
         reminders: LocalReminderGateway,
         google: LocalGoogleGateway,
-    ) : this(inference, models, reminders, google, NoOpLocalSmsGateway)
+    ) : this(
+        inference,
+        models,
+        reminders,
+        google,
+        NoOpLocalSmsGateway,
+        NoOpLocalAutomationGateway,
+    )
+
+    constructor(
+        inference: LlmInferenceService,
+        models: LocalModelRepository,
+        reminders: LocalReminderGateway,
+        google: LocalGoogleGateway,
+        sms: LocalSmsGateway,
+    ) : this(
+        inference,
+        models,
+        reminders,
+        google,
+        sms,
+        NoOpLocalAutomationGateway,
+    )
 
     override val capabilities: TransportCapabilities = TransportCapabilities.ON_DEVICE
 
     override fun stream(request: ChatTurnRequest): Flow<ChatEvent> = channelFlow {
         val convId = request.conversationId?.takeIf { it.isNotBlank() } ?: "local"
         val intercepted = try {
-            reminders.handle(request.message, convId)
+            automations.handle(request.message, convId)
+                ?: reminders.handle(request.message, convId)
                 ?: sms.handle(request.message, convId)
         } catch (e: CancellationException) {
             throw e

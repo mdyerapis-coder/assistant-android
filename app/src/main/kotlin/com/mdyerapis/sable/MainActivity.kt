@@ -12,8 +12,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.mdyerapis.sable.core.designsystem.theme.SableTheme
 import com.mdyerapis.sable.feature.chat.ExternalIntake
-import com.mdyerapis.sable.feature.chat.GoogleAccountManager
 import com.mdyerapis.sable.feature.chat.GoogleOAuthCompletionNotifier
+import com.mdyerapis.sable.feature.chat.OAuthCompleteLinks
 import com.mdyerapis.sable.feature.chat.SmsPermissionRationaleDialog
 import com.mdyerapis.sable.fcm.SmsRelayController
 import com.mdyerapis.sable.nav.AppNavHost
@@ -62,14 +62,14 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Handle the sableapp://oauth-complete deep link that Google's
-     * OAuth flow redirects to after the backend completes the token
-     * exchange. We just refresh the connection status; the Custom Tab
-     * closes itself when the app comes to the foreground.
+     * Handle assistantapp://oauth-complete (and the sableapp:// alias)
+     * after the O1 relay finishes the token exchange. We just refresh
+     * the connection status; the Custom Tab closes itself when the app
+     * comes to the foreground.
      */
     private fun handleOAuthDeepLink(intent: Intent?) {
         val data: Uri = intent?.data ?: return
-        if (data.toString() != GoogleAccountManager.OAUTH_COMPLETE_URI) return
+        if (!OAuthCompleteLinks.matches(data.scheme, data.host)) return
         googleOAuthCompletionNotifier.notifyCompletion()
         intent.action = null
         intent.data = null

@@ -31,7 +31,7 @@ fun SmsPermissionRationaleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Allow Sable to send and read SMS?") },
+        title = { Text("Allow Assistant to send and read SMS?") },
         text = {
             Text(
                 "On-device chat sends and reads texts with this phone’s SMS " +

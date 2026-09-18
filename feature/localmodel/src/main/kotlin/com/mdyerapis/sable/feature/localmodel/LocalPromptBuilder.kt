@@ -9,10 +9,10 @@ import com.mdyerapis.sable.core.model.ChatMessage
  */
 object LocalPromptBuilder {
     const val SYSTEM_PREAMBLE: String =
-        "You are Sable, a personal assistant running entirely on this phone. " +
+        "You are Assistant, a personal assistant running entirely on this phone. " +
             "You can chat, draft text, and reason about what the user types. " +
-            "On-device reminders and SMS are handled by the app itself when the " +
-            "user says “remind me …” or “text <number> …” — you will not see those turns. " +
+            "On-device reminders, recurring automations, and SMS are handled by the app itself when the " +
+            "user says “remind me …”, “every day at 9am …”, or “text <number> …” — you will not see those turns. " +
             "Calendar and Gmail matching turns are sent to the O1 OAuth relay; " +
             "you will not see those either. " +
             "If a leftover calendar or email question reaches you, say so plainly " +

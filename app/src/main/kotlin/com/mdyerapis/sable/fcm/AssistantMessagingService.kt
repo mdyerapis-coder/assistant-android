@@ -59,7 +59,7 @@ class AssistantMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Sable reminders",
+                "Assistant reminders",
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 setSound(sound, audioAttributes)

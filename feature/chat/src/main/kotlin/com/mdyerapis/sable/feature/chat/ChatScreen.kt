@@ -363,7 +363,7 @@ fun ChatScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         androidx.compose.material3.Text(
-                            text = "Can't reach Sable. Check your connection or re-configure.",
+                            text = "Can't reach the assistant. Check your connection or re-configure.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -461,13 +461,13 @@ fun ChatScreen(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "On-Device Sable ready." else "Sable ready.",
+                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "On-device Assistant ready." else "Assistant ready.",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                                        "Private on-device chat, local reminders, and SMS. Calendar and Gmail matching turns use the O1 relay when a bearer is pasted."
+                                        "Private on-device chat, local reminders, automations, and SMS. Calendar and Gmail matching turns use the O1 relay when a bearer is pasted."
                                     } else {
                                         "Ask anything or check calendar, email, and reminders"
                                     },
@@ -487,6 +487,7 @@ fun ChatScreen(
                                     buildList {
                                         add("Say hello" to "Say hello and introduce yourself!")
                                         add("Remind me" to "Remind me to stretch in 30 minutes")
+                                        add("Every day" to "every day at 9am remind me to drink water")
                                         add("My reminders" to "what are my reminders")
                                         add("Read my texts" to "read my texts")
                                         if (uiState.hasCloudSession) {
@@ -648,9 +649,9 @@ internal fun OnDeviceCapabilityBanner(
             )
             Text(
                 if (hasCloudSession) {
-                    "Reminders and SMS run on this phone (WorkManager / Android SMS, no FCM hop to self). Calendar and Gmail matching turns POST /v1/chat to $oauthRelayUrl (O1)."
+                    "Reminders, automations, and SMS run on this phone (WorkManager / Android SMS, no FCM hop to self). Calendar and Gmail matching turns POST /v1/chat to $oauthRelayUrl (O1)."
                 } else {
-                    "Reminders and SMS run on this phone. Calendar and Gmail need a bearer pasted for the O1 relay at $oauthRelayUrl even if chat stays on-device. The phone never holds a Google client_secret."
+                    "Reminders, automations, and SMS run on this phone. Calendar and Gmail need a bearer pasted for the O1 relay at $oauthRelayUrl even if chat stays on-device. The phone never holds a Google client_secret."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,

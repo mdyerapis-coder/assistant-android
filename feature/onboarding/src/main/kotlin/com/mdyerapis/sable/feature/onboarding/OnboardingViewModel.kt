@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Default backend — the hosted Sable instance. Editable at onboarding. */
+/** Default backend — the hosted Assistant instance. Editable at onboarding. */
 const val DEFAULT_BASE_URL = "https://assistant.llmclouds.au"
 const val DEFAULT_OAUTH_RELAY_URL = BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL
 
