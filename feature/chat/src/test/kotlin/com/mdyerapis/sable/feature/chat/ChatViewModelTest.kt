@@ -21,8 +21,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import okhttp3.OkHttpClient
@@ -212,7 +210,11 @@ class ChatViewModelTest {
 
     @After
     fun teardown() {
-        Dispatchers.resetMain()
+        // Intentionally skip Dispatchers.resetMain(). A leaked viewModelScope
+        // job (loadModels / loadProviderStatuses on Dispatchers.IO) that
+        // resumes after resetMain tries to create the Android main looper,
+        // fails, and poisons Dispatchers.Main for every later test in this JVM.
+        testDispatcher.scheduler.advanceUntilIdle()
     }
 
     @Test
