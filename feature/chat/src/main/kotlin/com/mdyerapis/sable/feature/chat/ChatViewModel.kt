@@ -22,8 +22,10 @@ import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
 import com.mdyerapis.sable.feature.localmodel.DefaultLocalGoogleGateway
 import com.mdyerapis.sable.feature.localmodel.LocalGoogleGateway
+import com.mdyerapis.sable.feature.localmodel.LocalAutomationGateway
 import com.mdyerapis.sable.feature.localmodel.LocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.LocalSmsGateway
+import com.mdyerapis.sable.feature.localmodel.NoOpLocalAutomationGateway
 import com.mdyerapis.sable.feature.localmodel.NoOpLocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.NoOpLocalSmsGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,6 +55,7 @@ open class ChatViewModel @Inject constructor(
     private val localReminderGateway: LocalReminderGateway = NoOpLocalReminderGateway,
     private val localGoogleGateway: LocalGoogleGateway = DefaultLocalGoogleGateway(tokenRepository),
     private val localSmsGateway: LocalSmsGateway = NoOpLocalSmsGateway,
+    private val localAutomationGateway: LocalAutomationGateway = NoOpLocalAutomationGateway,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -75,6 +78,7 @@ open class ChatViewModel @Inject constructor(
         localReminderGateway,
         localGoogleGateway,
         localSmsGateway,
+        localAutomationGateway,
     )
     private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null

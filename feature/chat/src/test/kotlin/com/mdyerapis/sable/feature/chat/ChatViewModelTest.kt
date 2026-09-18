@@ -9,11 +9,15 @@ import com.mdyerapis.sable.feature.chat.ExternalIntake
 import com.mdyerapis.sable.core.database.chat.ConversationSummary
 import com.mdyerapis.sable.core.database.chat.StoredMessage
 import com.mdyerapis.sable.core.security.BearerTokenRepository
+import com.mdyerapis.sable.core.database.automation.AutomationScheduler
+import com.mdyerapis.sable.core.database.automation.AutomationStore
+import com.mdyerapis.sable.core.database.automation.LocalAutomation
 import com.mdyerapis.sable.core.database.reminder.LocalReminder
 import com.mdyerapis.sable.core.database.reminder.ReminderScheduler
 import com.mdyerapis.sable.core.database.reminder.ReminderStore
 import com.mdyerapis.sable.core.model.DeviceSmsMessage
 import com.mdyerapis.sable.core.model.SmsOperations
+import com.mdyerapis.sable.feature.localmodel.DefaultLocalAutomationGateway
 import com.mdyerapis.sable.feature.localmodel.DefaultLocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.DefaultLocalSmsGateway
 import com.mdyerapis.sable.feature.localmodel.LlmInferenceService
@@ -859,6 +863,58 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun onDeviceAutomationCreate_worksWithoutLocalModel() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val store = InMemoryViewModelAutomationStore()
+        val scheduler = RecordingViewModelAutomationScheduler()
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+            localAutomationGateway = DefaultLocalAutomationGateway(store, scheduler),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertTrue(localRepo.state.value !is LocalModelState.Ready)
+
+        viewModel.sendMessage("every day at 9am remind me to drink water")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "user" && it.content.contains("drink water") })
+        assertTrue(
+            "assistant content=" + messages.filter { it.role == "assistant" }.joinToString { it.content },
+            messages.any { it.role == "assistant" && it.content.contains("drink water", ignoreCase = true) },
+        )
+        assertTrue(
+            viewModel.uiState.value.chatState.error == null ||
+                !viewModel.uiState.value.chatState.error!!.contains("not installed"),
+        )
+        assertEquals(1, scheduler.scheduled.size)
+        assertEquals("Drink water", scheduler.scheduled.first().actionText)
+        assertEquals(1, store.listEnabled().size)
+        assertFalse(viewModel.uiState.value.chatState.isLoading)
+    }
+
+    @Test
     fun onDeviceCalendarWithoutToken_isHonestO1Failure() = runTest(testDispatcher) {
         val modelPrefs = ModelPreferenceRepository(context)
         modelPrefs.setAppModelMode(AppModelMode.OnDevice)
@@ -1094,5 +1150,30 @@ class ChatViewModelTest {
         }
         override suspend fun readInbox(phoneFilter: String?, limit: Int): List<DeviceSmsMessage> =
             emptyList()
+    }
+
+    private class InMemoryViewModelAutomationStore : AutomationStore {
+        private val rows = LinkedHashMap<String, LocalAutomation>()
+        override suspend fun insert(automation: LocalAutomation) {
+            rows[automation.id] = automation
+        }
+        override suspend fun get(id: String): LocalAutomation? = rows[id]
+        override suspend fun listEnabled(): List<LocalAutomation> = rows.values.filter { it.enabled }
+        override suspend fun listAll(): List<LocalAutomation> = rows.values.toList()
+        override suspend fun markFired(id: String, nowMillis: Long): Boolean = false
+        override suspend fun markDisabled(id: String): Boolean {
+            val current = rows[id] ?: return false
+            if (!current.enabled) return false
+            rows[id] = current.copy(enabled = false)
+            return true
+        }
+    }
+
+    private class RecordingViewModelAutomationScheduler : AutomationScheduler {
+        val scheduled = mutableListOf<LocalAutomation>()
+        override fun schedule(automation: LocalAutomation) {
+            scheduled += automation
+        }
+        override fun cancel(id: String) {}
     }
 }

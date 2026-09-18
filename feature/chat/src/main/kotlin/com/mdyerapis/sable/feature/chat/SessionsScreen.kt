@@ -83,7 +83,7 @@ fun SessionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sable", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary) },
+                title = { Text("Assistant", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -173,7 +173,7 @@ fun SessionsScreen(
                     ) {
                         Image(
                             painter = painterResource(ChatR.drawable.ic_droid_avatar),
-                            contentDescription = "Sable",
+                            contentDescription = "Assistant",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.size(88.dp)
                         )

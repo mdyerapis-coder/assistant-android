@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.mdyerapis.sable.backendclient.DeviceTokenRegistrar
+import com.mdyerapis.sable.core.database.automation.AutomationScheduler
+import com.mdyerapis.sable.core.database.automation.AutomationStore
 import com.mdyerapis.sable.core.database.reminder.ReminderScheduler
 import com.mdyerapis.sable.core.database.reminder.ReminderStore
 import com.mdyerapis.sable.core.security.BearerTokenRepository
@@ -32,6 +34,12 @@ class App : Application(), Configuration.Provider {
     @Inject
     lateinit var reminderScheduler: ReminderScheduler
 
+    @Inject
+    lateinit var automationStore: AutomationStore
+
+    @Inject
+    lateinit var automationScheduler: AutomationScheduler
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -54,6 +62,7 @@ class App : Application(), Configuration.Provider {
         // WorkManager also persists, but unique REPLACE keeps the two in sync.
         appScope.launch {
             reminderStore.listPending().forEach { reminderScheduler.schedule(it) }
+            automationStore.listEnabled().forEach { automationScheduler.schedule(it) }
         }
     }
 }

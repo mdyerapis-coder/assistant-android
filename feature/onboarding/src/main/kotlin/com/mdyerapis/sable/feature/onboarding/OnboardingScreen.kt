@@ -72,9 +72,9 @@ fun OnboardingScreen(
             label = "onboardingFrame"
         ) { frame ->
             when (frame) {
-                0 -> StoryFrame(text = "Sable stays quiet.", emberIntensity = 0.15f) { viewModel.nextFrame() }
-                1 -> StoryFrame(text = "Sable remembers.", emberIntensity = 0.55f) { viewModel.nextFrame() }
-                2 -> StoryFrame(text = "Sable acts when you ask.", emberIntensity = 1f) { viewModel.nextFrame() }
+                0 -> StoryFrame(text = "The assistant stays quiet.", emberIntensity = 0.15f) { viewModel.nextFrame() }
+                1 -> StoryFrame(text = "The assistant remembers.", emberIntensity = 0.55f) { viewModel.nextFrame() }
+                2 -> StoryFrame(text = "The assistant acts when you ask.", emberIntensity = 1f) { viewModel.nextFrame() }
                 3 -> ConnectForm(uiState, viewModel)
             }
         }
@@ -186,7 +186,7 @@ private fun StoryFrame(text: String, emberIntensity: Float, onTap: () -> Unit) {
         ) {
             Image(
                 painter = painterResource(OnboardingR.drawable.ic_launcher_foreground),
-                contentDescription = "Sable",
+                contentDescription = "Assistant",
                 modifier = Modifier
                     .size(140.dp)
                     .graphicsLayer {
@@ -248,14 +248,14 @@ private fun ConnectForm(
         ) {
             Image(
                 painter = painterResource(OnboardingR.drawable.ic_launcher_foreground),
-                contentDescription = "Sable",
+                contentDescription = "Assistant",
                 modifier = Modifier.size(72.dp)
             )
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Sable",
+                text = "Assistant",
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -329,7 +329,7 @@ private fun ConnectForm(
                     if (uiState.isLoading) {
                         LoadingIndicator()
                     } else {
-                        Text("Wake up Sable", style = MaterialTheme.typography.labelLarge)
+                        Text("Wake up Assistant", style = MaterialTheme.typography.labelLarge)
                     }
                 }
 
@@ -341,7 +341,7 @@ private fun ConnectForm(
                     Text("Continue on-device without the server")
                 }
                 Text(
-                    "On-device chat uses MediaPipe on this phone. Local reminders and SMS run here. Calendar and Gmail always use the Google OAuth relay (default assistant.llmclouds.au) — paste a bearer once for Google even if chat stays on-device. The phone never stores a client_secret or refresh token.",
+                    "On-device chat uses MediaPipe on this phone. Local reminders, simple recurring automations, and SMS run here. Calendar and Gmail always use the Google OAuth relay (default assistant.llmclouds.au) — paste a bearer once for Google even if chat stays on-device. The phone never stores a client_secret or refresh token.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

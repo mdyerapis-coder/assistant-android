@@ -52,7 +52,7 @@ Why no per-message markup: the backend streams OpenAI directly (no proxy tax). H
 
 **Can I move phones?** Same bearer token → same threads on second device (server-side persistence).
 
-**What’s the app ID?** `com.mdyerapis.sable`, scheme `sableapp://oauth-complete`, base `https://sable.llmclouds.au`.
+**What’s the app ID?** `com.mdyerapis.sable` (kept — changing it would break upgrades and FCM). OAuth return `assistantapp://oauth-complete` (alias `sableapp://oauth-complete`). Chat/OAuth host `https://assistant.llmclouds.au`.
 
 ---
 *Terracotta #D97757 / #E08A6B, surfaces #171717/#212121/#F5F4EF. See `DESIGN.md` for tokens.*

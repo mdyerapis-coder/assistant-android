@@ -4,6 +4,8 @@ import android.content.Context
 import com.mdyerapis.sable.core.database.chat.ChatDatabase
 import com.mdyerapis.sable.core.database.chat.ConversationRepository
 import com.mdyerapis.sable.core.database.chat.ConversationStore
+import com.mdyerapis.sable.core.database.automation.AutomationStore
+import com.mdyerapis.sable.core.database.automation.RoomAutomationStore
 import com.mdyerapis.sable.core.database.reminder.ReminderStore
 import com.mdyerapis.sable.core.database.reminder.RoomReminderStore
 import dagger.Binds
@@ -38,4 +40,8 @@ abstract class ConversationStoreModule {
     @Binds
     @Singleton
     abstract fun bindReminderStore(impl: RoomReminderStore): ReminderStore
+
+    @Binds
+    @Singleton
+    abstract fun bindAutomationStore(impl: RoomAutomationStore): AutomationStore
 }

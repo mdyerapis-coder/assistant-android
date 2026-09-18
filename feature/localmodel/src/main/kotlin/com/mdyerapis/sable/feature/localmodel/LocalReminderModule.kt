@@ -12,4 +12,8 @@ abstract class LocalReminderModule {
     @Binds
     @Singleton
     abstract fun bindLocalReminderGateway(impl: DefaultLocalReminderGateway): LocalReminderGateway
+
+    @Binds
+    @Singleton
+    abstract fun bindLocalAutomationGateway(impl: DefaultLocalAutomationGateway): LocalAutomationGateway
 }

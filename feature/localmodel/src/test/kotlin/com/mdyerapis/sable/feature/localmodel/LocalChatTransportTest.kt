@@ -39,6 +39,7 @@ class LocalChatTransportTest {
         assertEquals(TransportCapabilities.ON_DEVICE, transport.capabilities)
         assertTrue(transport.capabilities.offline)
         assertTrue(transport.capabilities.reminders)
+        assertTrue(transport.capabilities.automations)
         assertTrue(transport.capabilities.sms)
         assertTrue(!transport.capabilities.tools)
         assertTrue(transport.capabilities.google)
@@ -69,6 +70,52 @@ class LocalChatTransportTest {
         assertTrue(events.any { it is ChatEvent.MessageCompleted })
         assertEquals(1, scheduler.scheduled.size)
         assertTrue(events.none { it is ChatEvent.Error })
+    }
+
+    @Test
+    fun automationCreateWorksWithoutModelWeights() = runTest {
+        val store = AutomationGatewayStore()
+        val scheduler = AutomationGatewayScheduler()
+        val transport = LocalChatTransport(
+            inference = LlmInferenceService(context, repo),
+            models = repo,
+            reminders = NoOpLocalReminderGateway,
+            google = NoOpLocalGoogleGateway,
+            sms = NoOpLocalSmsGateway,
+            automations = DefaultLocalAutomationGateway(store, scheduler),
+        )
+        val events = transport.stream(
+            ChatTurnRequest(
+                message = "every day at 9am remind me to drink water",
+                conversationId = "local:1",
+            ),
+        ).toList()
+        assertTrue(events.any { it is ChatEvent.ToolCallStarted && it.name == "create_automation" })
+        assertTrue(events.any { it is ChatEvent.MessageCompleted })
+        assertEquals(1, scheduler.scheduled.size)
+        assertEquals("Drink water", scheduler.scheduled.first().actionText)
+        assertTrue(events.none { it is ChatEvent.Error })
+    }
+
+    @Test
+    fun unsupportedAutomationIsHonestWithoutModel() = runTest {
+        val scheduler = AutomationGatewayScheduler()
+        val transport = LocalChatTransport(
+            inference = LlmInferenceService(context, repo),
+            models = repo,
+            reminders = NoOpLocalReminderGateway,
+            google = NoOpLocalGoogleGateway,
+            sms = NoOpLocalSmsGateway,
+            automations = DefaultLocalAutomationGateway(AutomationGatewayStore(), scheduler),
+        )
+        val events = transport.stream(
+            ChatTurnRequest(message = "every month remind me to pay rent", conversationId = "local:1"),
+        ).toList()
+        assertTrue(events.any { it is ChatEvent.ToolCallFinished && !it.ok })
+        val spoken = events.filterIsInstance<ChatEvent.Delta>().single().content
+        assertTrue(spoken.contains("monthly", ignoreCase = true))
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertTrue(events.none { it is ChatEvent.Error && it.message.contains("not installed") })
     }
 
     @Test
@@ -209,6 +256,26 @@ class LocalChatTransportTest {
         val scheduled = mutableListOf<com.mdyerapis.sable.core.database.reminder.LocalReminder>()
         override fun schedule(reminder: com.mdyerapis.sable.core.database.reminder.LocalReminder) {
             scheduled += reminder
+        }
+        override fun cancel(id: String) {}
+    }
+
+    private class AutomationGatewayStore : com.mdyerapis.sable.core.database.automation.AutomationStore {
+        private val rows = LinkedHashMap<String, com.mdyerapis.sable.core.database.automation.LocalAutomation>()
+        override suspend fun insert(automation: com.mdyerapis.sable.core.database.automation.LocalAutomation) {
+            rows[automation.id] = automation
+        }
+        override suspend fun get(id: String) = rows[id]
+        override suspend fun listEnabled() = rows.values.filter { it.enabled }
+        override suspend fun listAll() = rows.values.toList()
+        override suspend fun markFired(id: String, nowMillis: Long): Boolean = false
+        override suspend fun markDisabled(id: String): Boolean = false
+    }
+
+    private class AutomationGatewayScheduler : com.mdyerapis.sable.core.database.automation.AutomationScheduler {
+        val scheduled = mutableListOf<com.mdyerapis.sable.core.database.automation.LocalAutomation>()
+        override fun schedule(automation: com.mdyerapis.sable.core.database.automation.LocalAutomation) {
+            scheduled += automation
         }
         override fun cancel(id: String) {}
     }

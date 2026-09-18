@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.mdyerapis.sable.MainActivity
 import com.mdyerapis.sable.R
+import com.mdyerapis.sable.core.database.automation.AutomationNotifier
 import com.mdyerapis.sable.core.database.reminder.ReminderNotifier
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -19,8 +20,16 @@ import javax.inject.Singleton
 @Singleton
 class AndroidReminderNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
-) : ReminderNotifier {
+) : ReminderNotifier, AutomationNotifier {
     override fun notify(id: String, text: String) {
+        post(id, "Reminder", text)
+    }
+
+    override fun notify(id: String, title: String, text: String) {
+        post(id, title.ifBlank { "Automation" }, text)
+    }
+
+    private fun post(id: String, title: String, text: String) {
         ensureChannel()
         val tap = PendingIntent.getActivity(
             context,
@@ -30,7 +39,7 @@ class AndroidReminderNotifier @Inject constructor(
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Reminder")
+            .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(tap)
@@ -50,7 +59,7 @@ class AndroidReminderNotifier @Inject constructor(
             .build()
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Sable reminders",
+            "Assistant reminders",
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             setSound(sound, audioAttributes)
