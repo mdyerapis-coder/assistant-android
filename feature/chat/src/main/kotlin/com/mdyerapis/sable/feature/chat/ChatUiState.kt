@@ -31,6 +31,7 @@ data class ChatUiState(
     val availableLocalSpecs: List<LocalModelSpec> = emptyList(),
     val localDownloadState: LocalModelDownloadState = LocalModelDownloadState.Idle,
     val showLocalModelDialog: Boolean = false,
+    val showSmsPermissionDialog: Boolean = false,
     val ttsEnabled: Boolean = false,
     val pendingComposerText: String? = null,
     val serverUnreachable: Boolean = false,

@@ -39,6 +39,7 @@ class LocalChatTransportTest {
         assertEquals(TransportCapabilities.ON_DEVICE, transport.capabilities)
         assertTrue(transport.capabilities.offline)
         assertTrue(transport.capabilities.reminders)
+        assertTrue(transport.capabilities.sms)
         assertTrue(!transport.capabilities.tools)
         assertTrue(transport.capabilities.google)
     }
@@ -90,6 +91,25 @@ class LocalChatTransportTest {
         assertTrue(spoken.contains("O1 relay"))
         assertTrue(spoken.contains("client_secret"))
         assertTrue(events.none { it is ChatEvent.Error && it.message.contains("not installed") })
+    }
+
+    @Test
+    fun smsSendWorksWithoutModelWeights() = runTest {
+        val ops = RecordingSms()
+        val transport = LocalChatTransport(
+            inference = LlmInferenceService(context, repo),
+            models = repo,
+            reminders = NoOpLocalReminderGateway,
+            google = NoOpLocalGoogleGateway,
+            sms = DefaultLocalSmsGateway(ops),
+        )
+        val events = transport.stream(
+            ChatTurnRequest(message = "text 0412345678 running late", conversationId = "local:1"),
+        ).toList()
+        assertTrue(events.any { it is ChatEvent.ToolCallStarted && it.name == "send_sms" })
+        assertTrue(events.any { it is ChatEvent.MessageCompleted })
+        assertEquals(listOf("0412345678" to "running late"), ops.sent)
+        assertTrue(events.none { it is ChatEvent.Error })
     }
 
     @Test
@@ -191,5 +211,15 @@ class LocalChatTransportTest {
             scheduled += reminder
         }
         override fun cancel(id: String) {}
+    }
+
+    private class RecordingSms : com.mdyerapis.sable.core.model.SmsOperations {
+        val sent = mutableListOf<Pair<String, String>>()
+        override fun hasSendPermission(): Boolean = true
+        override fun hasReadPermission(): Boolean = true
+        override suspend fun send(phone: String, message: String) {
+            sent += phone to message
+        }
+        override suspend fun readInbox(phoneFilter: String?, limit: Int) = emptyList<com.mdyerapis.sable.core.model.DeviceSmsMessage>()
     }
 }

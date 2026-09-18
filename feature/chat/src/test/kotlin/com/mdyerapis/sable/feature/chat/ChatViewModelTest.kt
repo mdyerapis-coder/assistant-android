@@ -12,7 +12,10 @@ import com.mdyerapis.sable.core.security.BearerTokenRepository
 import com.mdyerapis.sable.core.database.reminder.LocalReminder
 import com.mdyerapis.sable.core.database.reminder.ReminderScheduler
 import com.mdyerapis.sable.core.database.reminder.ReminderStore
+import com.mdyerapis.sable.core.model.DeviceSmsMessage
+import com.mdyerapis.sable.core.model.SmsOperations
 import com.mdyerapis.sable.feature.localmodel.DefaultLocalReminderGateway
+import com.mdyerapis.sable.feature.localmodel.DefaultLocalSmsGateway
 import com.mdyerapis.sable.feature.localmodel.LlmInferenceService
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
@@ -944,6 +947,81 @@ class ChatViewModelTest {
         )
     }
 
+    @Test
+    fun onDeviceSmsSend_worksWithoutLocalModel() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val sms = RecordingViewModelSms(sendGranted = true, readGranted = true)
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+            localSmsGateway = DefaultLocalSmsGateway(sms),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        viewModel.sendMessage("text 0412345678 running late")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "assistant" && it.content.contains("0412345678") })
+        assertEquals(listOf("0412345678" to "running late"), sms.sent)
+        assertFalse(viewModel.uiState.value.showSmsPermissionDialog)
+        assertTrue(viewModel.uiState.value.chatState.error == null ||
+            !viewModel.uiState.value.chatState.error!!.contains("not installed"))
+    }
+
+    @Test
+    fun onDeviceSmsSend_withoutPermissionShowsDialog() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val sms = RecordingViewModelSms(sendGranted = false, readGranted = false)
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+            localSmsGateway = DefaultLocalSmsGateway(sms),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        viewModel.sendMessage("text 0412345678 hi")
+        settle(viewModel)
+        assertTrue(viewModel.uiState.value.showSmsPermissionDialog)
+        assertTrue(sms.sent.isEmpty())
+    }
+
     /**
      * Pump until the ViewModel has no in-flight work (model catalog, thread
      * sync, chat streams, queues). Replaces advanceUntilIdle in this file:
@@ -1002,5 +1080,19 @@ class ChatViewModelTest {
             scheduled += reminder
         }
         override fun cancel(id: String) {}
+    }
+
+    private class RecordingViewModelSms(
+        private val sendGranted: Boolean,
+        private val readGranted: Boolean,
+    ) : SmsOperations {
+        val sent = mutableListOf<Pair<String, String>>()
+        override fun hasSendPermission(): Boolean = sendGranted
+        override fun hasReadPermission(): Boolean = readGranted
+        override suspend fun send(phone: String, message: String) {
+            sent += phone to message
+        }
+        override suspend fun readInbox(phoneFilter: String?, limit: Int): List<DeviceSmsMessage> =
+            emptyList()
     }
 }

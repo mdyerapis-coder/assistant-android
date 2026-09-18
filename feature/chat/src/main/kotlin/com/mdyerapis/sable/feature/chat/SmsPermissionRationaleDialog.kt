@@ -1,25 +1,16 @@
-package com.mdyerapis.sable.fcm
+package com.mdyerapis.sable.feature.chat
 
 import android.Manifest
-import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
-import androidx.compose.ui.platform.LocalContext
 
 /**
- * Rationale dialog shown before requesting SMS permissions (phase 10).
- * Explains why the app needs SEND_SMS/READ_SMS — the user should not be
- * surprised by the system permission sheet. On grant, invokes onGranted
- * so a pending relay action is retried.
+ * Rationale shown before requesting SEND_SMS / READ_SMS. Used by the
+ * cloud FCM relay (phase 10) and by on-device P2 in-process SMS.
  */
 @Composable
 fun SmsPermissionRationaleDialog(
@@ -28,33 +19,30 @@ fun SmsPermissionRationaleDialog(
     onGranted: () -> Unit,
 ) {
     if (!visible) return
-    val context = LocalContext.current
-    var showSystemDialog by remember { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        val allGranted = result[Manifest.permission.SEND_SMS] == true ||
+        val granted = result[Manifest.permission.SEND_SMS] == true ||
             result[Manifest.permission.READ_SMS] == true
         onDismiss()
-        if (allGranted) onGranted()
+        if (granted) onGranted()
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Allow Assistant to send and read SMS?") },
+        title = { Text("Allow Sable to send and read SMS?") },
         text = {
             Text(
-                "The assistant relays texts through this phone: sending a " +
-                    "message you dictate and reading recent messages when you " +
-                    "ask. SMS is only touched when you ask — nothing is " +
-                    "uploaded or synced in the background."
+                "On-device chat sends and reads texts with this phone’s SMS " +
+                    "radio — no cloud hop. Cloud Assistant still uses the same " +
+                    "permission for its FCM relay. SMS is only touched when you ask; " +
+                    "nothing is uploaded or synced in the background.",
             )
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    showSystemDialog = true
                     launcher.launch(
                         arrayOf(
                             Manifest.permission.SEND_SMS,

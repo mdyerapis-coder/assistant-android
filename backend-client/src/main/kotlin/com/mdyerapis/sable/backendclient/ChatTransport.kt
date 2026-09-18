@@ -21,9 +21,9 @@ data class ChatTurnRequest(
 
 /**
  * What this transport can actually do. On-device MediaPipe is a reduced
- * assistant: chat tokens plus P1 local reminders. Calendar/Gmail matching
- * turns hitch a ride on the O1 OAuth relay (`google = true` hybrid). SMS
- * stays on the hosted backend until P2.
+ * assistant: chat tokens plus P1 local reminders and P2 in-process SMS.
+ * Calendar/Gmail matching turns hitch a ride on the O1 OAuth relay
+ * (`google = true` hybrid).
  */
 data class TransportCapabilities(
     val llm: Boolean,
@@ -47,7 +47,7 @@ data class TransportCapabilities(
             tools = false,
             google = true,
             reminders = true,
-            sms = false,
+            sms = true,
             offline = true,
         )
     }

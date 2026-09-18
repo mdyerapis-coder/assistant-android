@@ -1,14 +1,9 @@
 package com.mdyerapis.sable.fcm
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.Telephony
-import android.telephony.SmsManager
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.mdyerapis.sable.backendclient.SmsRelayApi
+import com.mdyerapis.sable.core.model.SmsOperations
 import com.mdyerapis.sable.core.network.OkHttpClientFactory
 import com.mdyerapis.sable.core.security.BearerTokenRepository
 import com.mdyerapis.sable.MainActivity
@@ -23,7 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Phone-side SMS relay (phase 10). Executes `send_sms` / `read_sms` FCM
@@ -32,7 +26,8 @@ import kotlinx.coroutines.withContext
  *
  * Request-driven only: SMS is touched exclusively when an FCM action
  * arrives — no background upload, no inbox mirroring, no periodic sync.
- * If the app lacks SEND_SMS/READ_SMS permission, the failure is reported
+ * Send/read go through [SmsOperations] (the same in-process Android APIs
+ * on-device chat uses). If permission is missing, the failure is reported
  * to the backend, the action is retained for retry, and a notification
  * guides the user to grant permission in-app.
  */
@@ -40,6 +35,7 @@ import kotlinx.coroutines.withContext
 class SmsRelayController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val tokenRepository: BearerTokenRepository,
+    private val sms: SmsOperations,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val pending = PendingHolder()
@@ -66,7 +62,12 @@ class SmsRelayController @Inject constructor(
             return
         }
 
-        if (!hasSmsPermission()) {
+        val permitted = when (action) {
+            ACTION_SEND -> sms.hasSendPermission()
+            ACTION_READ -> sms.hasReadPermission()
+            else -> false
+        }
+        if (!permitted) {
             pending.set(action, data)
             report(api, SmsRelayApi.SmsResultRequest(
                 request_id = requestId,
@@ -99,9 +100,7 @@ class SmsRelayController @Inject constructor(
     ) {
         val phone = data["phone"] ?: throw IllegalArgumentException("send_sms missing phone")
         val message = data["message"] ?: throw IllegalArgumentException("send_sms missing message")
-        withContext(Dispatchers.IO) {
-            SmsManager.getDefault().sendTextMessage(phone, null, message, null, null)
-        }
+        sms.send(phone, message)
         report(api, SmsRelayApi.SmsResultRequest(
             request_id = requestId,
             ok = true,
@@ -116,8 +115,12 @@ class SmsRelayController @Inject constructor(
     ) {
         val phoneFilter = data["phone"]?.takeIf { it.isNotBlank() }
         val limit = data["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 10
-        val messages = withContext(Dispatchers.IO) {
-            queryInbox(phoneFilter, limit)
+        val messages = sms.readInbox(phoneFilter, limit).map { msg ->
+            SmsRelayApi.SmsResultMessage(
+                from_number = msg.fromNumber,
+                message = msg.body,
+                received_at = ISO_FORMAT.format(Date(msg.receivedAtMillis)),
+            )
         }
         report(api, SmsRelayApi.SmsResultRequest(
             request_id = requestId,
@@ -125,48 +128,6 @@ class SmsRelayController @Inject constructor(
             messages = messages,
         ))
         Log.i(TAG, "SMS read returned ${messages.size} messages (request $requestId)")
-    }
-
-    private fun queryInbox(phoneFilter: String?, limit: Int): List<SmsRelayApi.SmsResultMessage> {
-        val resolver = context.contentResolver
-        val projection = arrayOf(
-            Telephony.Sms.Inbox.ADDRESS,
-            Telephony.Sms.Inbox.BODY,
-            Telephony.Sms.Inbox.DATE,
-        )
-        val selection = phoneFilter?.let {
-            "${Telephony.Sms.Inbox.ADDRESS} LIKE ?"
-        }
-        val selectionArgs = phoneFilter?.let { arrayOf("%$it%") }
-        val uri: Uri = Telephony.Sms.Inbox.CONTENT_URI
-        val results = mutableListOf<SmsRelayApi.SmsResultMessage>()
-        resolver.query(
-            uri, projection, selection, selectionArgs,
-            "${Telephony.Sms.Inbox.DATE} DESC",
-        )?.use { cursor ->
-            var count = 0
-            while (cursor.moveToNext() && count < limit) {
-                val address = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.Inbox.ADDRESS))
-                val body = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.Inbox.BODY))
-                val dateMs = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.Inbox.DATE))
-                results.add(
-                    SmsRelayApi.SmsResultMessage(
-                        from_number = address,
-                        message = body,
-                        received_at = ISO_FORMAT.format(Date(dateMs)),
-                    )
-                )
-                count++
-            }
-        }
-        return results
-    }
-
-    private fun hasSmsPermission(): Boolean {
-        val send = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS)
-        val read = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)
-        return send == PackageManager.PERMISSION_GRANTED &&
-            read == PackageManager.PERMISSION_GRANTED
     }
 
     private suspend fun report(api: SmsRelayApi, request: SmsRelayApi.SmsResultRequest) {

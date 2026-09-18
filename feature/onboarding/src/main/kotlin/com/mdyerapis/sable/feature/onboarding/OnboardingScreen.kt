@@ -341,7 +341,7 @@ private fun ConnectForm(
                     Text("Continue on-device without the server")
                 }
                 Text(
-                    "On-device chat uses MediaPipe on this phone. Local reminders fire here with WorkManager. Calendar and Gmail always use the Google OAuth relay (default assistant.llmclouds.au) — paste a bearer once for Google even if chat stays on-device. The phone never stores a client_secret or refresh token.",
+                    "On-device chat uses MediaPipe on this phone. Local reminders and SMS run here. Calendar and Gmail always use the Google OAuth relay (default assistant.llmclouds.au) — paste a bearer once for Google even if chat stays on-device. The phone never stores a client_secret or refresh token.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

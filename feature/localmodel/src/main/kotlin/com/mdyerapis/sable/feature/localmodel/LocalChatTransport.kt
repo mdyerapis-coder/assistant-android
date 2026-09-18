@@ -11,11 +11,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * On-device path: local reminder intents (P1), hybrid Google via the O1
- * OAuth relay, then MediaPipe tokens — all mapped onto [ChatEvent]s.
- * Reminder create/list/cancel does not need downloaded weights. Calendar
- * / Gmail matching turns POST `/v1/chat` to the relay; they never see a
- * refresh token or `client_secret`.
+ * On-device path: local reminder intents (P1), in-process SMS (P2),
+ * hybrid Google via the O1 OAuth relay, then MediaPipe tokens — all
+ * mapped onto [ChatEvent]s. Reminder/SMS turns do not need downloaded
+ * weights. Calendar / Gmail matching turns POST `/v1/chat` to the relay;
+ * they never see a refresh token or `client_secret`.
  */
 @Singleton
 class LocalChatTransport @Inject constructor(
@@ -23,37 +23,46 @@ class LocalChatTransport @Inject constructor(
     private val models: LocalModelRepository,
     private val reminders: LocalReminderGateway,
     private val google: LocalGoogleGateway,
+    private val sms: LocalSmsGateway,
 ) : ChatTransport {
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
-    ) : this(inference, models, NoOpLocalReminderGateway, NoOpLocalGoogleGateway)
+    ) : this(inference, models, NoOpLocalReminderGateway, NoOpLocalGoogleGateway, NoOpLocalSmsGateway)
 
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
         reminders: LocalReminderGateway,
-    ) : this(inference, models, reminders, NoOpLocalGoogleGateway)
+    ) : this(inference, models, reminders, NoOpLocalGoogleGateway, NoOpLocalSmsGateway)
+
+    constructor(
+        inference: LlmInferenceService,
+        models: LocalModelRepository,
+        reminders: LocalReminderGateway,
+        google: LocalGoogleGateway,
+    ) : this(inference, models, reminders, google, NoOpLocalSmsGateway)
 
     override val capabilities: TransportCapabilities = TransportCapabilities.ON_DEVICE
 
     override fun stream(request: ChatTurnRequest): Flow<ChatEvent> = channelFlow {
         val convId = request.conversationId?.takeIf { it.isNotBlank() } ?: "local"
-        val reminderEvents = try {
+        val intercepted = try {
             reminders.handle(request.message, convId)
+                ?: sms.handle(request.message, convId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             listOf(
                 ChatEvent.Error(
                     conversationId = convId,
-                    message = e.message ?: "On-device reminder failed",
+                    message = e.message ?: "On-device tool failed",
                     retryable = true,
                 ),
             )
         }
-        if (reminderEvents != null) {
-            reminderEvents.forEach { send(it) }
+        if (intercepted != null) {
+            intercepted.forEach { send(it) }
             return@channelFlow
         }
 
