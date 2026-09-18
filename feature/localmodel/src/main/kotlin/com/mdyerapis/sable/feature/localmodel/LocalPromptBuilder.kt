@@ -3,9 +3,9 @@ package com.mdyerapis.sable.feature.localmodel
 import com.mdyerapis.sable.core.model.ChatMessage
 
 /**
- * Builds a single prompt string for MediaPipe. Calendar, Gmail, and SMS
- * stay on the hosted backend. On-device reminders are handled before
- * this prompt is built (P1) — do not invent extra ones.
+ * Builds a single prompt string for MediaPipe. Calendar/Gmail matching
+ * turns are intercepted for the O1 relay before this prompt is built;
+ * on-device reminders likewise (P1). Do not invent extra ones.
  */
 object LocalPromptBuilder {
     const val SYSTEM_PREAMBLE: String =
@@ -13,10 +13,11 @@ object LocalPromptBuilder {
             "You can chat, draft text, and reason about what the user types. " +
             "On-device reminders are created by the app itself when the user says " +
             "“remind me …” with a time — you will not see those turns. " +
-            "You cannot access the internet, read Gmail or Calendar, or send SMS. " +
-            "If the user asks for calendar, email, or SMS, say so plainly and tell " +
-            "them to switch to Cloud Assistant. Do not invent calendar events, emails, " +
-            "or extra reminder confirmations."
+            "Calendar and Gmail matching turns are sent to the O1 OAuth relay; " +
+            "you will not see those either. You cannot send SMS. " +
+            "If a leftover calendar or email question reaches you, say so plainly " +
+            "and tell them to Connect Google / paste a bearer for the relay — " +
+            "do not invent calendar events, emails, or extra reminder confirmations."
 
     private const val HISTORY_CAP = 20
 

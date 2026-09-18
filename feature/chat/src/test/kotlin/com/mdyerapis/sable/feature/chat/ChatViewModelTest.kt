@@ -855,6 +855,95 @@ class ChatViewModelTest {
         assertFalse(viewModel.uiState.value.chatState.isLoading)
     }
 
+    @Test
+    fun onDeviceCalendarWithoutToken_isHonestO1Failure() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        viewModel.sendMessage("what's on my calendar?")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "user" && it.content == "what's on my calendar?" })
+        assertTrue(
+            "assistant content=" + messages.filter { it.role == "assistant" }.joinToString { it.content },
+            messages.any { it.role == "assistant" && it.content.contains("O1 relay") },
+        )
+        assertTrue(
+            viewModel.uiState.value.chatState.error == null ||
+                !viewModel.uiState.value.chatState.error!!.contains("not installed"),
+        )
+        viewModel.connectGoogle()
+        settle(viewModel)
+        assertTrue(viewModel.uiState.value.chatState.error!!.contains("bearer"))
+        assertTrue(viewModel.uiState.value.chatState.error!!.contains("client_secret"))
+        assertEquals(
+            BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL,
+            viewModel.uiState.value.oauthRelayUrl,
+        )
+        assertEquals(
+            BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL,
+            googleManager.configuredOauthRelayUrl(),
+        )
+    }
+
+    @Test
+    fun oauthRelayUrlIsIndependentOfChatBaseUrl() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = "test_token"
+            override fun getBaseUrl(): String? = "http://127.0.0.1:1"
+            override fun getOauthRelayUrl(): String = "https://assistant.llmclouds.au"
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals("https://assistant.llmclouds.au", googleManager.configuredOauthRelayUrl())
+        assertEquals("https://assistant.llmclouds.au", viewModel.uiState.value.oauthRelayUrl)
+        assertEquals("http://127.0.0.1:1", viewModel.uiState.value.chatBaseUrl)
+        assertEquals(
+            "https://assistant.llmclouds.au/oauth/google/start",
+            googleManager.oauthStartUrl(),
+        )
+    }
+
     /**
      * Pump until the ViewModel has no in-flight work (model catalog, thread
      * sync, chat streams, queues). Replaces advanceUntilIdle in this file:

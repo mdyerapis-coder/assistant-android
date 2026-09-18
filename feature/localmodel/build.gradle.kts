@@ -26,6 +26,7 @@ android {
 dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:model"))
+    implementation(project(":core:security"))
     implementation(project(":core:database"))
     implementation(project(":backend-client"))
     implementation(libs.okhttp)

@@ -22,6 +22,10 @@ data class ChatUiState(
     val appModelMode: AppModelMode = AppModelMode.Backend,
     /** False when onboarding skipped the bearer token (on-device-only). */
     val hasCloudSession: Boolean = false,
+    /** Chat FastAPI host (unused while on-device LLM is selected). */
+    val chatBaseUrl: String = "https://assistant.llmclouds.au",
+    /** ADR-013 O1 relay host; calendar/gmail Custom Tab + tool turns. */
+    val oauthRelayUrl: String = com.mdyerapis.sable.core.security.BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL,
     val localModelState: LocalModelState = LocalModelState.NotInstalled,
     val installedLocalModels: List<LocalModelInfo> = emptyList(),
     val availableLocalSpecs: List<LocalModelSpec> = emptyList(),

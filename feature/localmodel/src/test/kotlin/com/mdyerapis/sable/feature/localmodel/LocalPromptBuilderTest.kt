@@ -20,7 +20,7 @@ class LocalPromptBuilderTest {
         assertTrue(prompt.contains("User: hi"))
         assertTrue(prompt.contains("Assistant: hello"))
         assertTrue(prompt.contains("User: what's on my calendar?"))
-        assertTrue(prompt.contains("switch to Cloud Assistant"))
+        assertTrue(prompt.contains("Connect Google"))
         assertTrue(prompt.contains("On-device reminders are created by the app itself"))
         assertTrue(prompt.endsWith("Assistant:"))
         assertFalse(prompt.contains("ignored"))

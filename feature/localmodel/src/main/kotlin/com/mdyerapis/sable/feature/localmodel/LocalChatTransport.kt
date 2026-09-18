@@ -11,20 +11,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * On-device path: local reminder intents (P1) plus MediaPipe tokens,
- * both mapped onto [ChatEvent]s. Reminder create/list/cancel does not
- * need downloaded weights. There is still no calendar/gmail/SMS loop.
+ * On-device path: local reminder intents (P1), hybrid Google via the O1
+ * OAuth relay, then MediaPipe tokens — all mapped onto [ChatEvent]s.
+ * Reminder create/list/cancel does not need downloaded weights. Calendar
+ * / Gmail matching turns POST `/v1/chat` to the relay; they never see a
+ * refresh token or `client_secret`.
  */
 @Singleton
 class LocalChatTransport @Inject constructor(
     private val inference: LlmInferenceService,
     private val models: LocalModelRepository,
     private val reminders: LocalReminderGateway,
+    private val google: LocalGoogleGateway,
 ) : ChatTransport {
     constructor(
         inference: LlmInferenceService,
         models: LocalModelRepository,
-    ) : this(inference, models, NoOpLocalReminderGateway)
+    ) : this(inference, models, NoOpLocalReminderGateway, NoOpLocalGoogleGateway)
+
+    constructor(
+        inference: LlmInferenceService,
+        models: LocalModelRepository,
+        reminders: LocalReminderGateway,
+    ) : this(inference, models, reminders, NoOpLocalGoogleGateway)
 
     override val capabilities: TransportCapabilities = TransportCapabilities.ON_DEVICE
 
@@ -45,6 +54,26 @@ class LocalChatTransport @Inject constructor(
         }
         if (reminderEvents != null) {
             reminderEvents.forEach { send(it) }
+            return@channelFlow
+        }
+
+        val googleFlow = try {
+            google.handle(request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            kotlinx.coroutines.flow.flow {
+                emit(
+                    ChatEvent.Error(
+                        conversationId = convId,
+                        message = e.message ?: "O1 Google relay failed",
+                        retryable = true,
+                    ),
+                )
+            }
+        }
+        if (googleFlow != null) {
+            googleFlow.collect { send(it) }
             return@channelFlow
         }
 
