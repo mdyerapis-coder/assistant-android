@@ -110,9 +110,9 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (uiState.appModelMode == AppModelMode.OnDevice) {
-                        "MediaPipe on this phone. Chat plus local reminders (WorkManager). Calendar and Gmail stay on the O1 relay."
+                        "MediaPipe on this phone. Chat plus local reminders (WorkManager). Calendar and Gmail matching turns go to the O1 relay at ${uiState.oauthRelayUrl}."
                     } else {
-                        "Remote FastAPI SSE at assistant.llmclouds.au — tools, Google, reminders."
+                        "Remote FastAPI SSE — tools, Google, reminders. Google OAuth still uses ${uiState.oauthRelayUrl}."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -452,6 +452,32 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.oauthRelayUrl,
+                            onValueChange = { viewModel.updateOauthRelayUrl(it) },
+                            label = { Text("Google OAuth relay URL") },
+                            placeholder = { Text("https://assistant.llmclouds.au") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        Text(
+                            "Calendar and Gmail Custom Tabs always open this host’s /oauth/google/start, even when chat is on-device. Deep link stays sableapp://oauth-complete. Paste a bearer once for Google if you skipped cloud onboarding.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -474,11 +500,11 @@ fun SettingsScreen(
                                 Text(
                                     when {
                                         !uiState.hasCloudSession ->
-                                            "Needs the O1 relay on assistant.llmclouds.au — connect the cloud assistant first. No client_secret on device."
+                                            "Needs a bearer for ${uiState.oauthRelayUrl} — Connect cloud assistant even if chat stays on-device. No client_secret on this phone."
                                         uiState.appModelMode == AppModelMode.OnDevice && uiState.isGoogleConnected ->
-                                            "Connected for the cloud assistant. On-device chat cannot read Calendar or Gmail."
+                                            "Connected. On-device calendar/Gmail turns POST /v1/chat to the O1 relay; chat stays on this phone."
                                         uiState.isGoogleConnected -> "Calendar & Gmail connected"
-                                        else -> "Not connected"
+                                        else -> "Not connected — Custom Tab opens ${uiState.oauthRelayUrl}/oauth/google/start"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -525,7 +551,8 @@ fun SettingsScreen(
                             }
                         }
                         Text("Version $appVersion (V2 Program)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Backend Server: https://assistant.llmclouds.au", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Chat server: ${uiState.chatBaseUrl}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("OAuth relay: ${uiState.oauthRelayUrl}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = SableMonoFont), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val serverOnline = !uiState.serverUnreachable && uiState.modelError == null
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(
@@ -577,7 +604,7 @@ private fun OnDeviceLimitsCard() {
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
             LimitRow("Chat (MediaPipe)", "Works offline after the model is downloaded.")
-            LimitRow("Google Calendar / Gmail", "O1: thin OAuth relay on assistant.llmclouds.au. No client_secret on the phone.")
+            LimitRow("Google Calendar / Gmail", "O1 hybrid: Custom Tab + calendar/email turns hit the OAuth relay (default assistant.llmclouds.au). Refresh tokens stay on the VPS. No client_secret on the phone.")
             LimitRow("Reminders", "P1: create/list/cancel in local SQLite; due-time delivery via WorkManager + NotificationManager. Cloud mode still uses FCM from the VPS.")
             LimitRow("SMS", "P2: in-process when tools run on-device. Today this is an FCM relay through the backend.")
         }

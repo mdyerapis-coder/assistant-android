@@ -16,11 +16,13 @@ import javax.inject.Inject
 
 /** Default backend — the hosted Sable instance. Editable at onboarding. */
 const val DEFAULT_BASE_URL = "https://assistant.llmclouds.au"
+const val DEFAULT_OAUTH_RELAY_URL = BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL
 
 data class OnboardingUiState(
     val currentFrame: Int = 0, // 0-3: story frames + connect form
     val token: String = "",
     val baseUrl: String = DEFAULT_BASE_URL,
+    val oauthRelayUrl: String = DEFAULT_OAUTH_RELAY_URL,
     val isLoading: Boolean = false,
     val error: String? = null,
     val isDone: Boolean = false,
@@ -54,8 +56,15 @@ class OnboardingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(baseUrl = baseUrl, error = null)
     }
 
+    fun updateOauthRelayUrl(url: String) {
+        _uiState.value = _uiState.value.copy(oauthRelayUrl = url, error = null)
+    }
+
     fun continueOnDeviceWithoutServer() {
         tokenRepository.setOnDeviceAccess(true)
+        tokenRepository.saveOauthRelayUrl(
+            _uiState.value.oauthRelayUrl.ifBlank { DEFAULT_OAUTH_RELAY_URL },
+        )
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             error = null,
@@ -87,6 +96,9 @@ class OnboardingViewModel @Inject constructor(
                 if (healthy) {
                     tokenRepository.saveToken(state.token)
                     tokenRepository.saveBaseUrl(state.baseUrl)
+                    tokenRepository.saveOauthRelayUrl(
+                        state.oauthRelayUrl.ifBlank { DEFAULT_OAUTH_RELAY_URL },
+                    )
                     if (tokenRepository.getToken() == null) {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

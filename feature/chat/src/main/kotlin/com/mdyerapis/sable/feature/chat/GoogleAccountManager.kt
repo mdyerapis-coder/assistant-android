@@ -2,9 +2,9 @@ package com.mdyerapis.sable.feature.chat
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
+import com.mdyerapis.sable.core.security.BearerTokenRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,13 +16,14 @@ import javax.inject.Singleton
 /**
  * Manages the Google OAuth connection state for the user.
  *
- * - [status] queries the backend for whether Google is connected
+ * - [status] queries the O1 relay for whether Google is connected
  * - [connect] launches the OAuth flow in a Chrome Custom Tab
- * - [disconnect] revokes the stored tokens on the backend
+ * - [disconnect] revokes the stored tokens on the relay
  *
- * The backend handles all the OAuth dance (see docs/adr/007); the phone
+ * The relay handles all the OAuth dance (see docs/adr/007); the phone
  * just opens a Custom Tab at /oauth/google/start and gets deep-linked
  * back via sableapp://oauth-complete when the flow finishes.
+ * The Google client_secret never lives in this APK.
  */
 @Singleton
 open class GoogleAccountManager @Inject constructor(
@@ -30,16 +31,25 @@ open class GoogleAccountManager @Inject constructor(
     private val client: OkHttpClient,
 ) {
     @Volatile
-    private var baseUrl: String = "https://assistant.llmclouds.au"
+    private var oauthRelayUrl: String = BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL
 
-    open fun configureBaseUrl(url: String) {
-        baseUrl = url.trimEnd('/')
+    open fun configureOauthRelayUrl(url: String) {
+        oauthRelayUrl = url.trim().trimEnd('/').ifBlank {
+            BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL
+        }
     }
+
+    /** @deprecated Use [configureOauthRelayUrl]; kept so older call sites compile. */
+    open fun configureBaseUrl(url: String) = configureOauthRelayUrl(url)
+
+    open fun oauthStartUrl(): String = "$oauthRelayUrl/oauth/google/start"
+
+    open fun configuredOauthRelayUrl(): String = oauthRelayUrl
 
     open suspend fun status(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("$baseUrl/oauth/google/status")
+                .url("$oauthRelayUrl/oauth/google/status")
                 .get()
                 .build()
             client.newCall(request).execute().use { resp ->
@@ -53,7 +63,7 @@ open class GoogleAccountManager @Inject constructor(
     }
 
     /**
-     * Launch the OAuth flow in a Chrome Custom Tab. The backend redirects
+     * Launch the OAuth flow in a Chrome Custom Tab. The relay redirects
      * to Google's consent screen, then back to /oauth/google/callback,
      * which itself redirects to sableapp://oauth-complete.
      *
@@ -64,7 +74,7 @@ open class GoogleAccountManager @Inject constructor(
      * finishes (or dismisses) the Custom Tab.
      */
     fun launchOAuthFlow() {
-        val uri = "$baseUrl/oauth/google/start".toUri()
+        val uri = oauthStartUrl().toUri()
         val intent = CustomTabsIntent.Builder()
             .setShowTitle(true)
             .setUrlBarHidingEnabled(true)
@@ -76,7 +86,7 @@ open class GoogleAccountManager @Inject constructor(
     suspend fun disconnect(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("$baseUrl/oauth/google")
+                .url("$oauthRelayUrl/oauth/google")
                 .delete()
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }

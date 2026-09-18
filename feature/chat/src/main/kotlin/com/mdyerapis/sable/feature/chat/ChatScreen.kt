@@ -376,7 +376,10 @@ fun ChatScreen(
                 }
             }
             if (uiState.appModelMode == AppModelMode.OnDevice) {
-                OnDeviceCapabilityBanner(hasCloudSession = uiState.hasCloudSession)
+                OnDeviceCapabilityBanner(
+                    hasCloudSession = uiState.hasCloudSession,
+                    oauthRelayUrl = uiState.oauthRelayUrl,
+                )
             } else if (!uiState.hasCloudSession) {
                 Surface(
                     modifier = Modifier
@@ -458,7 +461,7 @@ fun ChatScreen(
                                 )
                                 Text(
                                     text = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                                        "Private on-device chat and local reminders. Calendar, Gmail, and SMS still need the cloud assistant."
+                                        "Private on-device chat and local reminders. Calendar and Gmail matching turns use the O1 relay when a bearer is pasted."
                                     } else {
                                         "Ask anything or check calendar, email, and reminders"
                                     },
@@ -475,11 +478,15 @@ fun ChatScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 val suggestions = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                                    listOf(
-                                        "Say hello" to "Say hello and introduce yourself!",
-                                        "Remind me" to "Remind me to stretch in 30 minutes",
-                                        "My reminders" to "what are my reminders",
-                                    )
+                                    buildList {
+                                        add("Say hello" to "Say hello and introduce yourself!")
+                                        add("Remind me" to "Remind me to stretch in 30 minutes")
+                                        add("My reminders" to "what are my reminders")
+                                        if (uiState.hasCloudSession) {
+                                            add("Today's schedule" to "What is on my calendar today?")
+                                            add("Unread emails" to "List my unread emails")
+                                        }
+                                    }
                                 } else {
                                     listOf(
                                         "Morning brief" to "Give me a morning brief",
@@ -615,7 +622,10 @@ fun ChatScreen(
 }
 
 @Composable
-internal fun OnDeviceCapabilityBanner(hasCloudSession: Boolean) {
+internal fun OnDeviceCapabilityBanner(
+    hasCloudSession: Boolean,
+    oauthRelayUrl: String = com.mdyerapis.sable.core.security.BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL,
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -631,9 +641,9 @@ internal fun OnDeviceCapabilityBanner(hasCloudSession: Boolean) {
             )
             Text(
                 if (hasCloudSession) {
-                    "Reminders fire on this phone (WorkManager, no FCM). Calendar and Gmail still run on the cloud assistant (O1 Google relay). SMS on-device is not built yet (P2)."
+                    "Reminders fire on this phone (WorkManager, no FCM). Calendar and Gmail matching turns POST /v1/chat to $oauthRelayUrl (O1). SMS on-device is not built yet (P2)."
                 } else {
-                    "Reminders fire on this phone (WorkManager + a local notification). Calendar, Gmail, and SMS need the cloud assistant. Connect a bearer token when you want those; the phone never holds a Google client_secret."
+                    "Reminders fire on this phone (WorkManager + a local notification). Calendar and Gmail need a bearer pasted for the O1 relay at $oauthRelayUrl even if chat stays on-device. The phone never holds a Google client_secret."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,

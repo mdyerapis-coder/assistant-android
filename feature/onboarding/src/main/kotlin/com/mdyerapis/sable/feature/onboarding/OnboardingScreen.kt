@@ -279,7 +279,17 @@ private fun ConnectForm(
                 OutlinedTextField(
                     value = uiState.baseUrl,
                     onValueChange = { viewModel.updateBaseUrl(it) },
-                    label = { Text("Server URL") },
+                    label = { Text("Chat server URL") },
+                    placeholder = { Text("https://assistant.llmclouds.au") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                )
+
+                OutlinedTextField(
+                    value = uiState.oauthRelayUrl,
+                    onValueChange = { viewModel.updateOauthRelayUrl(it) },
+                    label = { Text("Google OAuth relay URL") },
                     placeholder = { Text("https://assistant.llmclouds.au") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -331,7 +341,7 @@ private fun ConnectForm(
                     Text("Continue on-device without the server")
                 }
                 Text(
-                    "On-device chat uses MediaPipe on this phone. Local reminders fire here with WorkManager. Calendar and Gmail still need the cloud assistant — no Google client_secret is stored here.",
+                    "On-device chat uses MediaPipe on this phone. Local reminders fire here with WorkManager. Calendar and Gmail always use the Google OAuth relay (default assistant.llmclouds.au) — paste a bearer once for Google even if chat stays on-device. The phone never stores a client_secret or refresh token."
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

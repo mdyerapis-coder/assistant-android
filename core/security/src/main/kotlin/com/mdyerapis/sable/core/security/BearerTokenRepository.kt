@@ -7,6 +7,7 @@ open class BearerTokenRepository(context: Context) {
     private val prefs by lazy { context.getSharedPreferences("bearer_prefs", Context.MODE_PRIVATE) }
     private val key = "bearer_token"
     private val baseUrlKey = "base_url"
+    private val oauthRelayUrlKey = "oauth_relay_url"
     private val onDeviceAccessKey = "on_device_access"
 
     open fun saveBaseUrl(baseUrl: String) {
@@ -17,6 +18,23 @@ open class BearerTokenRepository(context: Context) {
 
     open fun clearBaseUrl() {
         prefs.edit().remove(baseUrlKey).apply()
+    }
+
+    /**
+     * ADR-013 O1: Calendar/Gmail Custom Tab + tool turns always hit this
+     * host, even when [getBaseUrl] is loopback or unused (pure on-device chat).
+     */
+    open fun saveOauthRelayUrl(url: String) {
+        prefs.edit().putString(oauthRelayUrlKey, url.trim().trimEnd('/')).apply()
+    }
+
+    open fun getOauthRelayUrl(): String {
+        val stored = prefs.getString(oauthRelayUrlKey, null)?.trim()?.trimEnd('/')
+        return stored?.takeIf { it.isNotBlank() } ?: DEFAULT_OAUTH_RELAY_URL
+    }
+
+    open fun clearOauthRelayUrl() {
+        prefs.edit().remove(oauthRelayUrlKey).apply()
     }
 
     open fun saveToken(token: String) {
@@ -45,5 +63,9 @@ open class BearerTokenRepository(context: Context) {
 
     open suspend fun verifyToken(baseUrl: String): Boolean {
         return getToken() != null
+    }
+
+    companion object {
+        const val DEFAULT_OAUTH_RELAY_URL = "https://assistant.llmclouds.au"
     }
 }

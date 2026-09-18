@@ -20,6 +20,8 @@ import com.mdyerapis.sable.feature.localmodel.LocalChatTransport
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
+import com.mdyerapis.sable.feature.localmodel.DefaultLocalGoogleGateway
+import com.mdyerapis.sable.feature.localmodel.LocalGoogleGateway
 import com.mdyerapis.sable.feature.localmodel.LocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.NoOpLocalReminderGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,22 +49,28 @@ open class ChatViewModel @Inject constructor(
     private val conversationStore: ConversationStore,
     private val externalIntake: ExternalIntake,
     private val localReminderGateway: LocalReminderGateway = NoOpLocalReminderGateway,
+    private val localGoogleGateway: LocalGoogleGateway = DefaultLocalGoogleGateway(tokenRepository),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
             availableLocalSpecs = localModelRepository.availableSpecs,
             hasCloudSession = tokenRepository.getToken() != null,
+            chatBaseUrl = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() }
+                ?: "https://assistant.llmclouds.au",
+            oauthRelayUrl = tokenRepository.getOauthRelayUrl(),
         )
     )
     val uiState: StateFlow<ChatUiState> = _uiState
 
     private var apiClient: ChatApiClient? = null
+    private var authedHttpClient: OkHttpClient? = null
     private var remoteTransport: ChatTransport? = null
     private val localTransport = LocalChatTransport(
         llmInferenceService,
         localModelRepository,
         localReminderGateway,
+        localGoogleGateway,
     )
     private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null
@@ -75,6 +83,7 @@ open class ChatViewModel @Inject constructor(
         if (tokenRepository.getToken() == null && tokenRepository.hasOnDeviceAccess()) {
             modelPreferenceRepository.setAppModelMode(AppModelMode.OnDevice)
         }
+        bindOauthRelay()
         val saved = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() }
         initClient(saved ?: baseUrl)
         viewModelScope.launch {
@@ -169,7 +178,6 @@ open class ChatViewModel @Inject constructor(
         if (apiClient != null) return
         val token = tokenRepository.getToken() ?: return
         this.baseUrl = baseUrl
-        googleAccountManager.configureBaseUrl(baseUrl)
         val client = OkHttpClientFactory.create().newBuilder()
             .addInterceptor { chain ->
                 chain.proceed(
@@ -179,10 +187,12 @@ open class ChatViewModel @Inject constructor(
                 )
             }
             .build()
+        authedHttpClient = client
         apiClient = ChatApiClient(client, baseUrl)
         remoteTransport = RemoteChatTransport(apiClient!!)
         threadsApi = createThreadsApi(client, baseUrl)
-        _uiState.value = _uiState.value.copy(hasCloudSession = true)
+        bindOauthRelay()
+        _uiState.value = _uiState.value.copy(hasCloudSession = true, chatBaseUrl = baseUrl)
         refreshGoogleStatus()
         loadModels()
         loadProviderStatuses()
@@ -372,6 +382,11 @@ open class ChatViewModel @Inject constructor(
     fun reconfigureServer() {
         tokenRepository.clearToken()
         tokenRepository.clearBaseUrl()
+        authedHttpClient = null
+        apiClient = null
+        remoteTransport = null
+        threadsApi = null
+        bindOauthRelay()
         _uiState.value = _uiState.value.copy(
             serverUnreachable = false,
             hasCloudSession = false,
@@ -484,15 +499,44 @@ open class ChatViewModel @Inject constructor(
     }
 
     fun connectGoogle() {
+        if (apiClient == null && tokenRepository.getToken() != null) {
+            ensureCloudClient()
+        }
+        val relay = tokenRepository.getOauthRelayUrl()
         if (tokenRepository.getToken() == null) {
             _uiState.value = _uiState.value.copy(
                 chatState = _uiState.value.chatState.copy(
-                    error = "Google Calendar and Gmail stay on the O1 relay at assistant.llmclouds.au. Connect the cloud assistant first — the phone never stores a Google client_secret.",
+                    error = "Google Calendar and Gmail stay on the O1 relay at $relay. " +
+                        "Paste a bearer token (Connect cloud assistant) even if chat stays on-device — " +
+                        "the phone never stores a Google client_secret.",
                 ),
             )
             return
         }
         googleAccountManager.launchOAuthFlow()
+    }
+
+    fun updateOauthRelayUrl(url: String) {
+        val cleaned = url.trim().trimEnd('/').ifBlank {
+            BearerTokenRepository.DEFAULT_OAUTH_RELAY_URL
+        }
+        tokenRepository.saveOauthRelayUrl(cleaned)
+        bindOauthRelay()
+    }
+
+    private fun bindOauthRelay() {
+        val relay = tokenRepository.getOauthRelayUrl()
+        googleAccountManager.configureOauthRelayUrl(relay)
+        val client = authedHttpClient
+        if (client != null && tokenRepository.getToken() != null) {
+            localGoogleGateway.configureRelay(
+                RemoteChatTransport(ChatApiClient(client, relay)),
+                relay,
+            )
+        } else {
+            localGoogleGateway.configureRelay(null, relay)
+        }
+        _uiState.value = _uiState.value.copy(oauthRelayUrl = relay)
     }
 
     fun disconnectGoogle() {
@@ -545,6 +589,9 @@ open class ChatViewModel @Inject constructor(
     }
 
     fun sendMessage(text: String) {
+        if (apiClient == null && tokenRepository.getToken() != null) {
+            ensureCloudClient()
+        }
         val currentState = _uiState.value.chatState
         if (currentState.isLoading && text.isNotBlank()) {
             _uiState.value = _uiState.value.copy(

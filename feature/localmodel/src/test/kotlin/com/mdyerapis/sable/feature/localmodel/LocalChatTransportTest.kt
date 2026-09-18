@@ -40,7 +40,7 @@ class LocalChatTransportTest {
         assertTrue(transport.capabilities.offline)
         assertTrue(transport.capabilities.reminders)
         assertTrue(!transport.capabilities.tools)
-        assertTrue(!transport.capabilities.google)
+        assertTrue(transport.capabilities.google)
     }
 
     @Test
@@ -71,18 +71,25 @@ class LocalChatTransportTest {
     }
 
     @Test
-    fun calendarWithoutModelIsHonestNotInstalledError() = runTest {
+    fun calendarWithoutBearerIsHonestO1Failure() = runTest {
+        val tokens = object : com.mdyerapis.sable.core.security.BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+        }
         val transport = LocalChatTransport(
             LlmInferenceService(context, repo),
             repo,
             DefaultLocalReminderGateway(GatewayStore(), GatewayScheduler()),
+            DefaultLocalGoogleGateway(tokens),
         )
         val events = transport.stream(
             ChatTurnRequest(message = "what's on my calendar?", conversationId = "local:1"),
         ).toList()
-        val error = events.single() as ChatEvent.Error
-        assertTrue(error.message.contains("not installed"))
-        assertTrue(events.none { it is ChatEvent.ToolCallStarted })
+        assertTrue(events.any { it is ChatEvent.ToolCallStarted && it.name == "calendar" })
+        assertTrue(events.any { it is ChatEvent.ToolCallFinished && !it.ok })
+        val spoken = events.filterIsInstance<ChatEvent.Delta>().single().content
+        assertTrue(spoken.contains("O1 relay"))
+        assertTrue(spoken.contains("client_secret"))
+        assertTrue(events.none { it is ChatEvent.Error && it.message.contains("not installed") })
     }
 
     @Test
@@ -109,10 +116,10 @@ class LocalChatTransportTest {
         val transport = LocalChatTransport(inference, repo)
         val events = transport.stream(
             ChatTurnRequest(
-                message = "what's on my calendar?",
+                message = "Say hello",
                 conversationId = "local:1",
                 history = listOf(
-                    ChatMessage(id = "u1", role = "user", content = "what's on my calendar?"),
+                    ChatMessage(id = "u1", role = "user", content = "Say hello"),
                 ),
             ),
         ).toList()
@@ -121,7 +128,7 @@ class LocalChatTransportTest {
         assertEquals("lo", (events[1] as ChatEvent.Delta).content)
         assertTrue(events[2] is ChatEvent.MessageCompleted)
         assertTrue(capturedPrompt!!.contains(LocalPromptBuilder.SYSTEM_PREAMBLE))
-        assertTrue(capturedPrompt!!.contains("what's on my calendar?"))
+        assertTrue(capturedPrompt!!.contains("Say hello"))
         assertTrue(events.none { it is ChatEvent.ToolCallStarted })
     }
 

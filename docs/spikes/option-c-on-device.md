@@ -8,7 +8,9 @@ This spike maps what `:feature:localmodel` already does versus the remote
 `ChatApiClient` / SSE path, names the gaps, and records the shippable
 deepening: a shared `ChatTransport` seam so chat can use MediaPipe without
 the remote LLM server, plus **P1 local reminders** (Room + WorkManager) so
-“remind me…” works with no FastAPI scheduler and no FCM.
+“remind me…” works with no FastAPI scheduler and no FCM, and **O1 hybrid
+Google** so Calendar/Gmail matching turns use the cloud OAuth relay while
+chat stays on `LocalChatTransport`.
 
 Source ADRs (backend repo, not copied here):
 
@@ -61,13 +63,14 @@ ChatScreen ─► ChatViewModel ─► RemoteChatTransport ─► ChatApiClient
 ```
 ChatScreen ─► ChatViewModel ─► LocalChatTransport
                                       │
-                    ┌─────────────────┴──────────────────┐
-                    ▼                                    ▼
-         LocalReminderGateway                  LlmInferenceService
-         (regex parser, Room,                  (MediaPipe, needs
-          WorkManager)                          downloaded .task)
-                    │                                    │
-                    └──────────► ChatEvent ──────────────┘
+                    ┌────────────┬────┴────────────┐
+                    ▼            ▼                 ▼
+         LocalReminderGateway  LocalGoogleGateway  LlmInferenceService
+         (regex, Room, WM)     (regex → POST       (MediaPipe, needs
+                                /v1/chat on the     downloaded .task)
+                                O1 relay)
+                    │            │                 │
+                    └────────────┴────► ChatEvent ─┘
                                       │
                                       ▼
                                ChatReducer ─► UI  (same fold as SSE)
@@ -75,9 +78,11 @@ ChatScreen ─► ChatViewModel ─► LocalChatTransport
 
 Reminder create/list/cancel is **not** an LLM tool loop. Small MediaPipe
 models hallucinate due times, so `LocalReminderParser` matches a short
-English grammar before inference. Unrelated turns still go to MediaPipe.
-Calendar / Gmail / SMS still have no in-process executor — that would be
-Option B / P2.
+English grammar before inference. Calendar / Gmail matching turns
+(`LocalGoogleParser`) POST `/v1/chat` to `oauthRelayUrl` with the Keystore
+bearer so the hosted backend’s existing Google tools run via
+`get_google_credentials()`. Unrelated turns still go to MediaPipe. SMS
+still has no in-process executor (P2).
 
 ## Gap matrix
 
@@ -85,13 +90,13 @@ Option B / P2.
 |---|---|---|---|
 | LLM chat tokens | **Yes**, after a MediaPipe `.task` is downloaded (download itself needs network once) | No | — |
 | Conversation history on device | **Yes**, Room (`ConversationStore`). Local turns now include last-N messages in the MediaPipe prompt | Server thread list / resume still `GET /v1/threads` when a bearer exists | — |
-| Tool loop (remember, calendar, gmail, SMS skill) | **No** | **Yes** — those tools run inside the SSE turn | Not Option C's job to reimplement |
-| Google OAuth / Calendar / Gmail | **No** on the phone | **Yes** — confidential client + encrypted tokens on the VPS | **O1** thin relay on `assistant.llmclouds.au`. Phone still opens a Custom Tab at `/oauth/google/start`. **Never** a `client_secret` in the APK |
+| Tool loop (remember, SMS skill) | **No** | **Yes** — those tools run inside the SSE turn | Not Option C's job to reimplement |
+| Google OAuth / Calendar / Gmail | **Hybrid (O1)** — Custom Tab + matching turns hit the relay; refresh tokens never land on the phone | **Yes** — confidential client + encrypted tokens on the VPS (`get_google_credentials()`) | **O1** dual URLs: `chatBaseUrl` vs `oauthRelayUrl` (default `https://assistant.llmclouds.au`). Phone opens a Custom Tab at `{oauthRelayUrl}/oauth/google/start`. Deep link `sableapp://oauth-complete` unchanged. **Never** a `client_secret` in the APK |
 | Reminder *creation* | **Yes (P1)** — Room `reminders` table + regex parser on the local chat path. Does **not** need model weights | Cloud mode still uses the backend `create_reminder` tool | Local store, not a Google API |
 | Reminder *delivery* while offline | **Yes (P1)** — WorkManager unique work + optional `AlarmManager.setExactAndAllowWhileIdle`; `NotificationManager` on channel `sable_reminders_v2` | Cloud mode still uses FCM from the VPS. Local mode does **not** register or wait on FCM for self-delivery | **P1** |
 | SMS send/read | **No** on-device as a tool | Today: FCM → phone SMS APIs → `POST /v1/sms/results` | **P2** in-process SMS when tools run on-device |
 | Memory (user_facts / search_past_conversations) | **No** | **Yes** | Unchanged |
-| App entry without bearer | **Yes** — onboarding "Continue on-device without the server" | Cloud chips / Google Connect still require a token | — |
+| App entry without bearer | **Yes** — onboarding "Continue on-device without the server" | Cloud chips / Google Connect still require a token. Paste once for Google even if chat stays on-device | — |
 
 ## First shippable deepening (ChatTransport + skip-cloud)
 
@@ -102,13 +107,15 @@ Option B / P2.
    mutation paths.
 2. **On-device prompt** (`LocalPromptBuilder`) injects a reduced-assistant
    preamble and the recent transcript so the local model is not amnesiac and
-   is told not to fake calendar/email/SMS (reminders are handled before the
-   prompt).
+   is told not to fake calendar/email/SMS (reminders and O1 Google turns are
+   handled before the prompt).
 3. **Onboarding skip** — enter the app without `/v1/health`. Sets
    `BearerTokenRepository.on_device_access` and forces `AppModelMode.OnDevice`.
+   Still persists `oauthRelayUrl` (default `https://assistant.llmclouds.au`).
 4. **Honest UX** — chat banner, settings capability card (O1/P1/P2), Google
-   Connect disabled without a cloud session, cloud mode refused without a
-   bearer token.
+   Connect disabled without a bearer, cloud mode refused without a
+   bearer token. No-token / unreachable relay calendar turns speak an O1
+   failure — they do not invent events.
 5. **Engine reuse** — `LlmInferenceService` caches `LlmInference` across turns
    for the same model path; `stopGenerating` closes it.
 
@@ -125,8 +132,8 @@ Shipped on the same Option C branch:
    “tomorrow at 9am”, “at 3pm”, “what are my reminders”, “cancel reminder …”.
    Emits the same `tool_call_started` / `finished` + spoken delta the cloud
    tool loop uses. **No model download required.** Unrelated chat still needs
-   weights; calendar/Gmail/SMS stay an honest “not installed / switch to
-   Cloud Assistant” failure.
+   weights; unmatched chat still needs weights. SMS stays an honest
+   “not installed / switch to Cloud Assistant” failure until P2.
 3. **Due-time delivery** — `WorkManagerReminderScheduler` enqueues
    `OneTimeWorkRequest<LocalReminderWorker>` as unique work
    `local-reminder-{id}` with `ExistingWorkPolicy.REPLACE` and an initial
@@ -146,9 +153,37 @@ Shipped on the same Option C branch:
    implements `Configuration.Provider` + `HiltWorkerFactory` and re-binds
    pending rows on start.
 
-What this is **not**: a full assistant in the APK. Calendar, Gmail, SMS, and
-memory still degrade honestly. There is still no Google `client_secret` in
-the APK.
+What this is **not**: a full assistant in the APK. SMS and memory still
+degrade honestly. There is still no Google `client_secret` in the APK.
+
+## O1 now covers (hybrid Google via the OAuth relay)
+
+Shipped on this branch. Phone-side PKCE (O2) stays rejected.
+
+1. **Dual URLs** — `chatBaseUrl` (`BearerTokenRepository.base_url`) is the
+   Cloud Assistant FastAPI host (loopback or unused in pure on-device
+   chat). `oauthRelayUrl` (default `https://assistant.llmclouds.au`) is
+   always the Google host. Settings and onboarding edit them separately.
+2. **Bearer UX (honest)** — Google Connect, `/oauth/google/status`,
+   `DELETE /oauth/google`, and calendar/Gmail turns all need the existing
+   Keystore bearer. Skip-cloud onboarding does **not** invent a token.
+   Settings → **Connect cloud assistant** is how you paste one later
+   without switching chat off On-Device LLM. The same token authorizes
+   the relay; you may never use it for the cloud LLM.
+3. **Custom Tab** — `GoogleAccountManager` always opens
+   `{oauthRelayUrl}/oauth/google/start`. Deep link remains
+   `sableapp://oauth-complete` (unchanged). `client_secret` and token
+   refresh stay on the VPS (`GET /oauth/google/callback`,
+   `get_google_credentials()`).
+4. **Calendar / Gmail from on-device chat** — `LocalGoogleParser` then
+   `DefaultLocalGoogleGateway`. Matching turns POST `/v1/chat` to the
+   relay (existing backend Google tools). On-device `local:` conversation
+   ids and MediaPipe model ids are **not** sent. Refresh tokens are
+   **not** downloaded. Unrelated chat stays on MediaPipe.
+5. **Honest failure** — no bearer, no bound relay transport, or an
+   unreachable/401 relay emits a `tool_call_finished` / `Error` that names
+   the O1 host and tells the user to paste a token / Connect Google. No
+   fake calendar events.
 
 ## How to verify
 
@@ -170,8 +205,12 @@ Load-bearing cases:
 - `LocalReminderFiringTest` — first fire wins; cancel and unknown id are no-ops
 - `LocalReminderGatewayTest` — create schedules, list reads store, cancel unschedules
 - `LocalChatTransportTest.reminderCreateWorksWithoutModelWeights`
-- `LocalChatTransportTest.calendarWithoutModelIsHonestNotInstalledError`
+- `LocalChatTransportTest.calendarWithoutBearerIsHonestO1Failure`
+- `LocalGoogleParserTest` — calendar / gmail / unrelated (reminders not stolen)
+- `LocalGoogleGatewayTest` — no token honest; relay `/v1/chat` omits `local:` ids and MediaPipe model ids; unreachable relay is honest
 - `ChatViewModelTest.onDeviceReminderCreate_worksWithoutLocalModel`
+- `ChatViewModelTest.onDeviceCalendarWithoutToken_isHonestO1Failure`
+- `ChatViewModelTest.oauthRelayUrlIsIndependentOfChatBaseUrl`
 - `LocalReminderWorkTest` — unique work name + shared FCM channel id
 - Existing Option C cases: `RemoteChatTransportTest`, `LocalPromptBuilderTest`,
   `ChatViewModelTest.onDeviceSend_streamsThroughChatReducerAndPersistsAssistant`,
@@ -202,27 +241,42 @@ This cloud agent has no phone. On hardware:
 6. “what are my reminders” lists pending rows; “cancel reminder ping” removes
    the work. A cancelled reminder must not notify.
 7. Airplane mode after creating a 15-second reminder: it must still fire
-   locally. Cloud Calendar / Gmail questions still refuse.
-8. Download a catalog `.task` (needs network once; Gemma 3n is ~3 GB). After
+   locally. **what's on my calendar?** without a bearer must speak an O1
+   relay failure (paste token / Connect Google), **not** invent events
+   and **not** open the model-download dialog as the only answer.
+8. Settings → **Connect cloud assistant**: paste the live bearer. Leave
+   **On-Device LLM** selected. Set Google OAuth relay URL to
+   `https://assistant.llmclouds.au` if it isn't already. **Connect Google**
+   opens a Custom Tab at
+   `https://assistant.llmclouds.au/oauth/google/start` and returns on
+   `sableapp://oauth-complete`. Then send **What is on my calendar today?**
+   — the turn should POST `/v1/chat` to the relay (backend Google tools),
+   while “Say hello” still does **not** hit `/v1/chat`.
+9. Download a catalog `.task` (needs network once; Gemma 3n is ~3 GB). After
    `LocalModelState.Ready`, send "Say hello". Tokens should stream with **no**
    call to `POST /v1/chat`.
-9. Settings → **Connect cloud assistant** still reaches bearer onboarding.
-   After a token, Cloud Assistant + FCM reminders work as before. Switching
-   back to On-Device LLM must not send `local:` conversation ids to `/v1/chat`.
+10. After a token, Cloud Assistant + FCM reminders work as before. Switching
+    back to On-Device LLM must not send `local:` conversation ids to
+    `/v1/chat` except for O1 Google turns (those omit `local:` and use a
+    relay conversation id). Airplane mode after Google is connected: calendar
+    turns fail honestly (“Couldn't reach the Google OAuth relay”); chat and
+    reminders still work.
 
 ### What you will not see
 
 - A Google `client_secret` anywhere in the APK
+- Google refresh tokens stored on the phone
 - Chaquopy / Option A
+- Phone-side PKCE (O2)
 - SMS tools without the FCM relay (until P2)
-- On-device calendar or Gmail (O1 stays the relay)
 - Local-mode reminder delivery via FCM (P1 is WorkManager + `NotificationManager`)
+- Fake calendar events when the relay is down
 
 ## Follow-ups (not this slice)
 
 | ID | Work |
 |---|---|
-| O1 (backend + a thin Android Custom Tab already exists) | Keep OAuth on `assistant.llmclouds.au`; do not add PKCE-with-secret on device |
-| P1 | **Done on this branch** — WorkManager + local notifications + Room create/list/cancel |
+| O1 | **Done on this branch** — dual URLs, Custom Tab always on `oauthRelayUrl`, calendar/gmail turns reuse relay `POST /v1/chat`. Do not add PKCE-with-secret on device |
+| P1 | **Done** — WorkManager + local notifications + Room create/list/cancel |
 | P2 | In-process SMS when/if a local tool loop exists — still not Option B |
 | Later Option C | Optional tiny on-device memory store; do not scrape Hugging Face for GGUF (engine cannot run them) |
