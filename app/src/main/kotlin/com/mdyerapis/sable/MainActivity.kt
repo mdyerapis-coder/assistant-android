@@ -14,7 +14,7 @@ import com.mdyerapis.sable.core.designsystem.theme.SableTheme
 import com.mdyerapis.sable.feature.chat.ExternalIntake
 import com.mdyerapis.sable.feature.chat.GoogleAccountManager
 import com.mdyerapis.sable.feature.chat.GoogleOAuthCompletionNotifier
-import com.mdyerapis.sable.fcm.SmsPermissionRationaleDialog
+import com.mdyerapis.sable.feature.chat.SmsPermissionRationaleDialog
 import com.mdyerapis.sable.fcm.SmsRelayController
 import com.mdyerapis.sable.nav.AppNavHost
 import dagger.hilt.android.AndroidEntryPoint

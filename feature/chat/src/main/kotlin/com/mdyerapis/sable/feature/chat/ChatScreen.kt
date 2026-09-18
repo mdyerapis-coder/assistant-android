@@ -161,6 +161,12 @@ fun ChatScreen(
         )
     }
 
+    SmsPermissionRationaleDialog(
+        visible = uiState.showSmsPermissionDialog,
+        onDismiss = { viewModel.dismissSmsPermissionDialog() },
+        onGranted = { viewModel.onSmsPermissionGranted() },
+    )
+
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
@@ -320,7 +326,7 @@ fun ChatScreen(
                 },
                 enabled = true,
                 placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                    "Chat or set a reminder..."
+                    "Chat, remind, or text..."
                 } else {
                     "Ask assistant..."
                 },
@@ -461,7 +467,7 @@ fun ChatScreen(
                                 )
                                 Text(
                                     text = if (uiState.appModelMode == AppModelMode.OnDevice) {
-                                        "Private on-device chat and local reminders. Calendar and Gmail matching turns use the O1 relay when a bearer is pasted."
+                                        "Private on-device chat, local reminders, and SMS. Calendar and Gmail matching turns use the O1 relay when a bearer is pasted."
                                     } else {
                                         "Ask anything or check calendar, email, and reminders"
                                     },
@@ -482,6 +488,7 @@ fun ChatScreen(
                                         add("Say hello" to "Say hello and introduce yourself!")
                                         add("Remind me" to "Remind me to stretch in 30 minutes")
                                         add("My reminders" to "what are my reminders")
+                                        add("Read my texts" to "read my texts")
                                         if (uiState.hasCloudSession) {
                                             add("Today's schedule" to "What is on my calendar today?")
                                             add("Unread emails" to "List my unread emails")
@@ -641,9 +648,9 @@ internal fun OnDeviceCapabilityBanner(
             )
             Text(
                 if (hasCloudSession) {
-                    "Reminders fire on this phone (WorkManager, no FCM). Calendar and Gmail matching turns POST /v1/chat to $oauthRelayUrl (O1). SMS on-device is not built yet (P2)."
+                    "Reminders and SMS run on this phone (WorkManager / Android SMS, no FCM hop to self). Calendar and Gmail matching turns POST /v1/chat to $oauthRelayUrl (O1)."
                 } else {
-                    "Reminders fire on this phone (WorkManager + a local notification). Calendar and Gmail need a bearer pasted for the O1 relay at $oauthRelayUrl even if chat stays on-device. The phone never holds a Google client_secret."
+                    "Reminders and SMS run on this phone. Calendar and Gmail need a bearer pasted for the O1 relay at $oauthRelayUrl even if chat stays on-device. The phone never holds a Google client_secret."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,

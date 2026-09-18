@@ -23,7 +23,9 @@ import com.mdyerapis.sable.feature.localmodel.LocalModelState
 import com.mdyerapis.sable.feature.localmodel.DefaultLocalGoogleGateway
 import com.mdyerapis.sable.feature.localmodel.LocalGoogleGateway
 import com.mdyerapis.sable.feature.localmodel.LocalReminderGateway
+import com.mdyerapis.sable.feature.localmodel.LocalSmsGateway
 import com.mdyerapis.sable.feature.localmodel.NoOpLocalReminderGateway
+import com.mdyerapis.sable.feature.localmodel.NoOpLocalSmsGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +52,7 @@ open class ChatViewModel @Inject constructor(
     private val externalIntake: ExternalIntake,
     private val localReminderGateway: LocalReminderGateway = NoOpLocalReminderGateway,
     private val localGoogleGateway: LocalGoogleGateway = DefaultLocalGoogleGateway(tokenRepository),
+    private val localSmsGateway: LocalSmsGateway = NoOpLocalSmsGateway,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -71,9 +74,11 @@ open class ChatViewModel @Inject constructor(
         localModelRepository,
         localReminderGateway,
         localGoogleGateway,
+        localSmsGateway,
     )
     private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null
+    private var pendingSmsRetry: String? = null
 
     private var activeConversationId: String? = null
     private var activeServerConversationId: String? = null
@@ -474,6 +479,18 @@ open class ChatViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showLocalModelDialog = show)
     }
 
+    fun dismissSmsPermissionDialog() {
+        _uiState.value = _uiState.value.copy(showSmsPermissionDialog = false)
+    }
+
+    /** After the user grants SEND_SMS/READ_SMS, retry the last on-device SMS turn. */
+    fun onSmsPermissionGranted() {
+        val retry = pendingSmsRetry
+        pendingSmsRetry = null
+        _uiState.value = _uiState.value.copy(showSmsPermissionDialog = false)
+        if (!retry.isNullOrBlank()) sendMessage(retry)
+    }
+
     fun installLocalModel(url: String, sha256: String? = null, modelId: String = "gemma-3-1b-it") {
         viewModelScope.launch {
             localModelRepository.install(url, sha256, modelId)
@@ -645,10 +662,18 @@ open class ChatViewModel @Inject constructor(
                     val needsDownload = onDevice &&
                         event is ChatEvent.Error &&
                         event.message.contains("not installed", ignoreCase = true)
+                    val needsSmsPermission = onDevice &&
+                        event is ChatEvent.ToolCallFinished &&
+                        !event.ok &&
+                        event.summary.contains("SMS permission", ignoreCase = true)
+                    if (needsSmsPermission) {
+                        pendingSmsRetry = text
+                    }
                     _uiState.value = _uiState.value.copy(
                         chatState = state,
                         serverUnreachable = if (unreachable) true else _uiState.value.serverUnreachable,
                         showLocalModelDialog = _uiState.value.showLocalModelDialog || needsDownload,
+                        showSmsPermissionDialog = _uiState.value.showSmsPermissionDialog || needsSmsPermission,
                     )
                     if (event is ChatEvent.Delta && !onDevice) {
                         _uiState.value = _uiState.value.copy(serverUnreachable = false)

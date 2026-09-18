@@ -110,7 +110,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (uiState.appModelMode == AppModelMode.OnDevice) {
-                        "MediaPipe on this phone. Chat plus local reminders (WorkManager). Calendar and Gmail matching turns go to the O1 relay at ${uiState.oauthRelayUrl}."
+                        "MediaPipe on this phone. Chat, local reminders (WorkManager), and in-process SMS. Calendar and Gmail matching turns go to the O1 relay at ${uiState.oauthRelayUrl}."
                     } else {
                         "Remote FastAPI SSE — tools, Google, reminders. Google OAuth still uses ${uiState.oauthRelayUrl}."
                     },
@@ -606,7 +606,7 @@ private fun OnDeviceLimitsCard() {
             LimitRow("Chat (MediaPipe)", "Works offline after the model is downloaded.")
             LimitRow("Google Calendar / Gmail", "O1 hybrid: Custom Tab + calendar/email turns hit the OAuth relay (default assistant.llmclouds.au). Refresh tokens stay on the VPS. No client_secret on the phone.")
             LimitRow("Reminders", "P1: create/list/cancel in local SQLite; due-time delivery via WorkManager + NotificationManager. Cloud mode still uses FCM from the VPS.")
-            LimitRow("SMS", "P2: in-process when tools run on-device. Today this is an FCM relay through the backend.")
+            LimitRow("SMS", "P2: send/read via Android SmsManager and the SMS inbox on this phone. Cloud mode still uses the FCM relay + POST /v1/sms/results.")
         }
     }
 }
