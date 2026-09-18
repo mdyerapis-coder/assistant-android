@@ -7,6 +7,7 @@ open class BearerTokenRepository(context: Context) {
     private val prefs by lazy { context.getSharedPreferences("bearer_prefs", Context.MODE_PRIVATE) }
     private val key = "bearer_token"
     private val baseUrlKey = "base_url"
+    private val onDeviceAccessKey = "on_device_access"
 
     open fun saveBaseUrl(baseUrl: String) {
         prefs.edit().putString(baseUrlKey, baseUrl).apply()
@@ -29,6 +30,17 @@ open class BearerTokenRepository(context: Context) {
 
     open fun clearToken() {
         prefs.edit().remove(key).apply()
+    }
+
+    /**
+     * Onboarding can skip the cloud bearer check (ADR-012 Option C).
+     * Does not imply a model is downloaded — only that the user may
+     * enter the app and use the MediaPipe path.
+     */
+    open fun hasOnDeviceAccess(): Boolean = prefs.getBoolean(onDeviceAccessKey, false)
+
+    open fun setOnDeviceAccess(enabled: Boolean) {
+        prefs.edit().putBoolean(onDeviceAccessKey, enabled).apply()
     }
 
     open suspend fun verifyToken(baseUrl: String): Boolean {

@@ -9,15 +9,18 @@ import com.mdyerapis.sable.feature.chat.ExternalIntake
 import com.mdyerapis.sable.core.database.chat.ConversationSummary
 import com.mdyerapis.sable.core.database.chat.StoredMessage
 import com.mdyerapis.sable.core.security.BearerTokenRepository
+import com.mdyerapis.sable.core.database.reminder.LocalReminder
+import com.mdyerapis.sable.core.database.reminder.ReminderScheduler
+import com.mdyerapis.sable.core.database.reminder.ReminderStore
+import com.mdyerapis.sable.feature.localmodel.DefaultLocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.LlmInferenceService
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
+import com.mdyerapis.sable.feature.localmodel.LocalModelState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import okhttp3.OkHttpClient
@@ -207,7 +210,11 @@ class ChatViewModelTest {
 
     @After
     fun teardown() {
-        Dispatchers.resetMain()
+        // Intentionally skip Dispatchers.resetMain(). A leaked viewModelScope
+        // job (loadModels / loadProviderStatuses on Dispatchers.IO) that
+        // resumes after resetMain tries to create the Android main looper,
+        // fails, and poisons Dispatchers.Main for every later test in this JVM.
+        testDispatcher.scheduler.advanceUntilIdle()
     }
 
     @Test
@@ -675,6 +682,179 @@ class ChatViewModelTest {
         settle(viewModel)
     }
 
+    @Test
+    fun onDeviceAccessWithoutToken_startsInOnDeviceMode() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertFalse(viewModel.uiState.value.hasCloudSession)
+        assertTrue(viewModel.uiState.value.showLocalModelDialog)
+    }
+
+    @Test
+    fun onDeviceSend_streamsThroughChatReducerAndPersistsAssistant() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val modelFile = File(filesDir, "models/gemma-3n-E2B-it.task")
+        modelFile.parentFile!!.mkdirs()
+        modelFile.writeText("dummy-weights")
+        localRepo.checkInstalledState()
+        val store = FakeConversationStore()
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {
+                override suspend fun generate(
+                    prompt: String,
+                    replaceInput: Boolean,
+                    onPartial: suspend (String) -> Unit,
+                ): String {
+                    onPartial("On-device ")
+                    onPartial("reply")
+                    return "On-device reply"
+                }
+            },
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+
+        viewModel.sendMessage("hello local")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "user" && it.content == "hello local" })
+        assertTrue(
+            "assistant content=" + messages.filter { it.role == "assistant" }.joinToString { it.content },
+            messages.any { it.role == "assistant" && it.content == "On-device reply" },
+        )
+        assertFalse(viewModel.uiState.value.chatState.isLoading)
+        val convoId = viewModel.uiState.value.availableSessions.first().id
+        val captured = store.capturedMessages(convoId)
+        assertTrue(captured.any { it.role == "assistant" && it.content == "On-device reply" })
+    }
+
+    @Test
+    fun setBackendModeWithoutToken_staysOffCloud() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        viewModel.setAppModelMode(AppModelMode.Backend)
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertTrue(viewModel.uiState.value.chatState.error!!.contains("bearer token"))
+    }
+
+    @Test
+    fun onDeviceReminderCreate_worksWithoutLocalModel() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val reminderStore = InMemoryViewModelReminderStore()
+        val reminderScheduler = RecordingViewModelScheduler()
+        val store = FakeConversationStore()
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+            localReminderGateway = DefaultLocalReminderGateway(reminderStore, reminderScheduler),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertTrue(localRepo.state.value !is LocalModelState.Ready)
+
+        viewModel.sendMessage("Remind me to stretch in 30 minutes")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "user" && it.content == "Remind me to stretch in 30 minutes" })
+        assertTrue(
+            "assistant content=" + messages.filter { it.role == "assistant" }.joinToString { it.content },
+            messages.any { it.role == "assistant" && it.content.contains("stretch", ignoreCase = true) },
+        )
+        assertTrue(viewModel.uiState.value.chatState.error == null ||
+            !viewModel.uiState.value.chatState.error!!.contains("not installed"))
+        assertEquals(1, reminderScheduler.scheduled.size)
+        assertEquals("Stretch", reminderScheduler.scheduled.first().text)
+        assertEquals(1, reminderStore.listPending().size)
+        assertFalse(viewModel.uiState.value.chatState.isLoading)
+    }
+
     /**
      * Pump until the ViewModel has no in-flight work (model catalog, thread
      * sync, chat streams, queues). Replaces advanceUntilIdle in this file:
@@ -707,5 +887,31 @@ class ChatViewModelTest {
         }
         // Bounded: if the condition still doesn't hold, the caller's
         // assert fails with a clear message.
+    }
+
+    private class InMemoryViewModelReminderStore : ReminderStore {
+        private val rows = LinkedHashMap<String, LocalReminder>()
+        override suspend fun insert(reminder: LocalReminder) {
+            rows[reminder.id] = reminder
+        }
+        override suspend fun get(id: String): LocalReminder? = rows[id]
+        override suspend fun listPending(): List<LocalReminder> =
+            rows.values.filter { it.isPending }.sortedBy { it.dueAtMillis }
+        override suspend fun listAll(): List<LocalReminder> = rows.values.toList()
+        override suspend fun markFired(id: String, nowMillis: Long): Boolean = false
+        override suspend fun markCancelled(id: String): Boolean {
+            val current = rows[id] ?: return false
+            if (!current.isPending) return false
+            rows[id] = current.copy(status = LocalReminder.STATUS_CANCELLED)
+            return true
+        }
+    }
+
+    private class RecordingViewModelScheduler : ReminderScheduler {
+        val scheduled = mutableListOf<LocalReminder>()
+        override fun schedule(reminder: LocalReminder) {
+            scheduled += reminder
+        }
+        override fun cancel(id: String) {}
     }
 }

@@ -20,6 +20,8 @@ data class ChatUiState(
     val isLoadingModels: Boolean = false,
     val modelError: String? = null,
     val appModelMode: AppModelMode = AppModelMode.Backend,
+    /** False when onboarding skipped the bearer token (on-device-only). */
+    val hasCloudSession: Boolean = false,
     val localModelState: LocalModelState = LocalModelState.NotInstalled,
     val installedLocalModels: List<LocalModelInfo> = emptyList(),
     val availableLocalSpecs: List<LocalModelSpec> = emptyList(),

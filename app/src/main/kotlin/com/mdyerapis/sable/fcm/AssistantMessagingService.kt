@@ -11,6 +11,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.mdyerapis.sable.backendclient.DeviceTokenRegistrar
 import com.mdyerapis.sable.R
+import com.mdyerapis.sable.reminders.AndroidReminderNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -50,7 +51,7 @@ class AssistantMessagingService : FirebaseMessagingService() {
     private fun showNotification(title: String, body: String) {
         // A versioned channel ensures existing installs pick up Sable's sound.
         // Android intentionally freezes a channel's sound after creation.
-        val channelId = "sable_reminders_v2"
+        val channelId = AndroidReminderNotifier.CHANNEL_ID
         val sound = Uri.parse("android.resource://$packageName/${R.raw.notification_chirp}")
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)

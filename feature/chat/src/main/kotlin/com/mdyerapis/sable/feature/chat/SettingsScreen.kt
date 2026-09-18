@@ -29,6 +29,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onConnectCloud: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -104,6 +105,25 @@ fun SettingsScreen(
                             label = { Text("On-Device LLM") },
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (uiState.appModelMode == AppModelMode.OnDevice) {
+                        "MediaPipe on this phone. Chat plus local reminders (WorkManager). Calendar and Gmail stay on the O1 relay."
+                    } else {
+                        "Remote FastAPI SSE at assistant.llmclouds.au — tools, Google, reminders."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!uiState.hasCloudSession) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onConnectCloud,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Connect cloud assistant")
                     }
                 }
             }
@@ -338,6 +358,8 @@ fun SettingsScreen(
                             }
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
+                    OnDeviceLimitsCard()
                 }
             }
 
@@ -450,14 +472,22 @@ fun SettingsScreen(
                             Column {
                                 Text("Google Account", style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    if (uiState.isGoogleConnected) "Calendar & Gmail connected" else "Not connected",
+                                    when {
+                                        !uiState.hasCloudSession ->
+                                            "Needs the O1 relay on assistant.llmclouds.au — connect the cloud assistant first. No client_secret on device."
+                                        uiState.appModelMode == AppModelMode.OnDevice && uiState.isGoogleConnected ->
+                                            "Connected for the cloud assistant. On-device chat cannot read Calendar or Gmail."
+                                        uiState.isGoogleConnected -> "Calendar & Gmail connected"
+                                        else -> "Not connected"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         TextButton(
-                            onClick = if (uiState.isGoogleConnected) viewModel::disconnectGoogle else viewModel::connectGoogle
+                            onClick = if (uiState.isGoogleConnected) viewModel::disconnectGoogle else viewModel::connectGoogle,
+                            enabled = uiState.hasCloudSession,
                         ) {
                             Text(if (uiState.isGoogleConnected) "Disconnect" else "Connect")
                         }
@@ -502,18 +532,62 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(if (serverOnline) ConfiguredGreen else MaterialTheme.colorScheme.error)
+                                    .background(
+                                        when {
+                                            uiState.appModelMode == AppModelMode.OnDevice && !uiState.hasCloudSession ->
+                                                MaterialTheme.colorScheme.tertiary
+                                            serverOnline -> ConfiguredGreen
+                                            else -> MaterialTheme.colorScheme.error
+                                        }
+                                    )
                             )
                             Text(
-                                if (serverOnline) "Server Status: Reachable"
-                                else "Server Status: Unreachable — check connection or re-login",
+                                when {
+                                    uiState.appModelMode == AppModelMode.OnDevice && !uiState.hasCloudSession ->
+                                        "On-device — cloud LLM not required"
+                                    serverOnline -> "Server Status: Reachable"
+                                    else -> "Server Status: Unreachable — check connection or re-login"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (serverOnline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                color = if (serverOnline || (uiState.appModelMode == AppModelMode.OnDevice && !uiState.hasCloudSession)) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
                             )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OnDeviceLimitsCard() {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "What on-device can and cannot do",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            LimitRow("Chat (MediaPipe)", "Works offline after the model is downloaded.")
+            LimitRow("Google Calendar / Gmail", "O1: thin OAuth relay on assistant.llmclouds.au. No client_secret on the phone.")
+            LimitRow("Reminders", "P1: create/list/cancel in local SQLite; due-time delivery via WorkManager + NotificationManager. Cloud mode still uses FCM from the VPS.")
+            LimitRow("SMS", "P2: in-process when tools run on-device. Today this is an FCM relay through the backend.")
+        }
+    }
+}
+
+@Composable
+private fun LimitRow(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
     }
 }

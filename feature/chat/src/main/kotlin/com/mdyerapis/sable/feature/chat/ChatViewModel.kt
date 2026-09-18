@@ -4,18 +4,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mdyerapis.sable.backendclient.ChatApiClient
 import com.mdyerapis.sable.backendclient.ChatReducer
-import com.mdyerapis.sable.backendclient.SseFrameCodec
+import com.mdyerapis.sable.backendclient.ChatTransport
+import com.mdyerapis.sable.backendclient.ChatTurnRequest
+import com.mdyerapis.sable.backendclient.RemoteChatTransport
 import com.mdyerapis.sable.backendclient.ThreadsApi
 import com.mdyerapis.sable.core.database.chat.ConversationStore
 import com.mdyerapis.sable.core.database.chat.StoredMessage
+import com.mdyerapis.sable.core.model.ChatEvent
 import com.mdyerapis.sable.core.model.ChatMessage
 import com.mdyerapis.sable.core.model.ChatState
 import com.mdyerapis.sable.core.network.OkHttpClientFactory
 import com.mdyerapis.sable.core.security.BearerTokenRepository
 import com.mdyerapis.sable.feature.localmodel.LlmInferenceService
+import com.mdyerapis.sable.feature.localmodel.LocalChatTransport
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelSpec
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
+import com.mdyerapis.sable.feature.localmodel.LocalReminderGateway
+import com.mdyerapis.sable.feature.localmodel.NoOpLocalReminderGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -40,14 +46,24 @@ open class ChatViewModel @Inject constructor(
     private val llmInferenceService: LlmInferenceService,
     private val conversationStore: ConversationStore,
     private val externalIntake: ExternalIntake,
+    private val localReminderGateway: LocalReminderGateway = NoOpLocalReminderGateway,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        ChatUiState(availableLocalSpecs = localModelRepository.availableSpecs)
+        ChatUiState(
+            availableLocalSpecs = localModelRepository.availableSpecs,
+            hasCloudSession = tokenRepository.getToken() != null,
+        )
     )
     val uiState: StateFlow<ChatUiState> = _uiState
 
     private var apiClient: ChatApiClient? = null
+    private var remoteTransport: ChatTransport? = null
+    private val localTransport = LocalChatTransport(
+        llmInferenceService,
+        localModelRepository,
+        localReminderGateway,
+    )
     private var baseUrl: String = "https://assistant.llmclouds.au"
     private var streamJob: Job? = null
 
@@ -56,6 +72,9 @@ open class ChatViewModel @Inject constructor(
     private var threadsApi: ThreadsApi? = null
 
     init {
+        if (tokenRepository.getToken() == null && tokenRepository.hasOnDeviceAccess()) {
+            modelPreferenceRepository.setAppModelMode(AppModelMode.OnDevice)
+        }
         val saved = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() }
         initClient(saved ?: baseUrl)
         viewModelScope.launch {
@@ -75,7 +94,12 @@ open class ChatViewModel @Inject constructor(
         }
         viewModelScope.launch {
             modelPreferenceRepository.appModelMode.collect { mode ->
-                _uiState.value = _uiState.value.copy(appModelMode = mode)
+                val promptDownload = mode == AppModelMode.OnDevice &&
+                    localModelRepository.state.value !is LocalModelState.Ready
+                _uiState.value = _uiState.value.copy(
+                    appModelMode = mode,
+                    showLocalModelDialog = _uiState.value.showLocalModelDialog || promptDownload,
+                )
             }
         }
         viewModelScope.launch {
@@ -156,13 +180,26 @@ open class ChatViewModel @Inject constructor(
             }
             .build()
         apiClient = ChatApiClient(client, baseUrl)
+        remoteTransport = RemoteChatTransport(apiClient!!)
         threadsApi = createThreadsApi(client, baseUrl)
+        _uiState.value = _uiState.value.copy(hasCloudSession = true)
         refreshGoogleStatus()
         loadModels()
         loadProviderStatuses()
         // Phase 08: hydrate server threads into the Room cache on every
         // client (re)initialization — fresh installs resume from here.
         syncThreads()
+    }
+
+    /** Late-bind the cloud client after on-device-only onboarding later adds a token. */
+    fun ensureCloudClient() {
+        if (apiClient != null) {
+            _uiState.value = _uiState.value.copy(hasCloudSession = tokenRepository.getToken() != null)
+            return
+        }
+        val saved = tokenRepository.getBaseUrl()?.takeIf { it.isNotBlank() } ?: baseUrl
+        initClient(saved)
+        _uiState.value = _uiState.value.copy(hasCloudSession = tokenRepository.getToken() != null)
     }
 
     /**
@@ -295,6 +332,14 @@ open class ChatViewModel @Inject constructor(
     }
 
     fun setAppModelMode(mode: AppModelMode) {
+        if (mode == AppModelMode.Backend && tokenRepository.getToken() == null) {
+            _uiState.value = _uiState.value.copy(
+                chatState = _uiState.value.chatState.copy(
+                    error = "Cloud assistant needs a bearer token. Connect the server, or stay on-device.",
+                ),
+            )
+            return
+        }
         modelPreferenceRepository.setAppModelMode(mode)
     }
 
@@ -327,7 +372,10 @@ open class ChatViewModel @Inject constructor(
     fun reconfigureServer() {
         tokenRepository.clearToken()
         tokenRepository.clearBaseUrl()
-        _uiState.value = _uiState.value.copy(serverUnreachable = false)
+        _uiState.value = _uiState.value.copy(
+            serverUnreachable = false,
+            hasCloudSession = false,
+        )
     }
 
     fun toggleTts() {
@@ -436,6 +484,14 @@ open class ChatViewModel @Inject constructor(
     }
 
     fun connectGoogle() {
+        if (tokenRepository.getToken() == null) {
+            _uiState.value = _uiState.value.copy(
+                chatState = _uiState.value.chatState.copy(
+                    error = "Google Calendar and Gmail stay on the O1 relay at assistant.llmclouds.au. Connect the cloud assistant first — the phone never stores a Google client_secret.",
+                ),
+            )
+            return
+        }
         googleAccountManager.launchOAuthFlow()
     }
 
@@ -460,6 +516,7 @@ open class ChatViewModel @Inject constructor(
         val chat = _uiState.value.chatState
         streamJob?.cancel()
         streamJob = null
+        llmInferenceService.cancel()
         val finalized = if (chat.currentContent.isNotBlank()) {
             val partial = ChatMessage(
                 id = "stopped-${System.currentTimeMillis()}",
@@ -496,74 +553,18 @@ open class ChatViewModel @Inject constructor(
             return
         }
 
-        // On-Device Mode
-        if (_uiState.value.appModelMode == AppModelMode.OnDevice) {
-            val localState = localModelRepository.state.value
-            if (localState !is LocalModelState.Ready) {
-                _uiState.value = _uiState.value.copy(
-                    chatState = currentState.copy(
-                        error = "Local model is not installed. Please download one from model settings.",
-                        isLoading = false,
-                    ),
-                    showLocalModelDialog = true
-                )
-                return
-            }
+        val onDevice = _uiState.value.appModelMode == AppModelMode.OnDevice
 
-            val userMsg = ChatMessage(
-                id = "user-${System.currentTimeMillis()}",
-                role = "user",
-                content = text,
-                timestamp = System.currentTimeMillis(),
+        val transport = resolveTransport()
+        if (transport == null) {
+            _uiState.value = _uiState.value.copy(
+                chatState = currentState.copy(
+                    error = "Cloud assistant isn't connected. Connect the server, or switch to on-device chat.",
+                    isLoading = false,
+                ),
             )
-            val withUserMessage = currentState.copy(
-                messages = currentState.messages + userMsg,
-                isLoading = true,
-                error = null,
-                currentContent = "",
-            )
-            _uiState.value = _uiState.value.copy(chatState = withUserMessage)
-
-            streamJob = viewModelScope.launch {
-                val convoId = ensureConversation()
-                conversationStore.appendMessage(convoId, userMsg.id, "user", text)
-
-                try {
-                    var accumulated = ""
-                    val result = llmInferenceService.generate(text) { partial ->
-                        accumulated += partial
-                        _uiState.value = _uiState.value.copy(
-                            chatState = _uiState.value.chatState.copy(currentContent = accumulated)
-                        )
-                    }
-
-                    val finalContent = accumulated.ifBlank { result }
-                    val assistantMsg = ChatMessage(
-                        id = "local-${System.currentTimeMillis()}",
-                        role = "assistant",
-                        content = finalContent,
-                        timestamp = System.currentTimeMillis(),
-                    )
-                    val updatedMessages = _uiState.value.chatState.messages + assistantMsg
-                    _uiState.value = _uiState.value.copy(
-                        chatState = _uiState.value.chatState.copy(
-                            messages = updatedMessages,
-                            currentContent = "",
-                            isLoading = false,
-                        )
-                    )
-                    conversationStore.appendMessage(convoId, assistantMsg.id, "assistant", finalContent)
-                } catch (e: CancellationException) {
-                    throw e
-                }
-                streamJob = null
-                drainNextQueued()
-            }
             return
         }
-
-        // Backend Mode
-        val client = apiClient ?: return
 
         val userMsg = ChatMessage(
             id = "user-${System.currentTimeMillis()}",
@@ -575,50 +576,52 @@ open class ChatViewModel @Inject constructor(
             messages = currentState.messages + userMsg,
             isLoading = true,
             error = null,
+            currentContent = "",
         )
         _uiState.value = _uiState.value.copy(chatState = withUserMessage)
+        val knownIds = withUserMessage.messages.map { it.id }.toSet()
 
         streamJob = viewModelScope.launch {
             val convoId = ensureConversation()
             conversationStore.appendMessage(convoId, userMsg.id, "user", text)
             try {
-                val response = withContext(Dispatchers.IO) {
-                    client.streamChat(
-                        message = text,
-                        conversationId = _uiState.value.chatState.conversationId,
-                        model = _uiState.value.selectedModelId,
-                    )
-                }
-                if (!response.isSuccessful) {
-                    val isAuthOrServer = response.code in 401..503
-                    _uiState.value = _uiState.value.copy(
-                        chatState = _uiState.value.chatState.copy(
-                            error = "Server error: ${response.code}",
-                            isLoading = false,
-                        ),
-                        serverUnreachable = isAuthOrServer,
-                    )
-                    return@launch
-                }
-
-                // A healthy reply clears any stale recovery banner.
-                _uiState.value = _uiState.value.copy(serverUnreachable = false)
+                val request = ChatTurnRequest(
+                    message = text,
+                    conversationId = outgoingConversationId(onDevice, convoId),
+                    model = _uiState.value.selectedModelId,
+                    history = withUserMessage.messages,
+                )
                 var state = _uiState.value.chatState
-                SseFrameCodec.events(response).collect { event ->
+                transport.stream(request).collect { event ->
                     state = ChatReducer.reduce(state, event)
-                    _uiState.value = _uiState.value.copy(chatState = state)
+                    val unreachable = event is ChatEvent.Error && event.retryable && !onDevice
+                    val needsDownload = onDevice &&
+                        event is ChatEvent.Error &&
+                        event.message.contains("not installed", ignoreCase = true)
+                    _uiState.value = _uiState.value.copy(
+                        chatState = state,
+                        serverUnreachable = if (unreachable) true else _uiState.value.serverUnreachable,
+                        showLocalModelDialog = _uiState.value.showLocalModelDialog || needsDownload,
+                    )
+                    if (event is ChatEvent.Delta && !onDevice) {
+                        _uiState.value = _uiState.value.copy(serverUnreachable = false)
+                    }
                 }
 
                 val serverConversationId = state.conversationId
-                if (serverConversationId != activeServerConversationId) {
+                    ?.takeUnless { it.startsWith(LOCAL_CONVERSATION_PREFIX) }
+                if (!onDevice &&
+                    serverConversationId != null &&
+                    serverConversationId != activeServerConversationId
+                ) {
                     activeServerConversationId = serverConversationId
                     conversationStore.setServerConversationId(convoId, serverConversationId)
                     _uiState.value = _uiState.value.copy(
-                        chatState = _uiState.value.chatState.copy(conversationId = serverConversationId)
+                        chatState = _uiState.value.chatState.copy(conversationId = serverConversationId),
                     )
                 }
                 state.messages
-                    .filter { it.id != userMsg.id && it.role != "user" }
+                    .filter { it.id !in knownIds }
                     .forEach { msg ->
                         conversationStore.appendMessage(convoId, msg.id, msg.role, msg.content)
                     }
@@ -630,7 +633,7 @@ open class ChatViewModel @Inject constructor(
                         error = "Couldn't reach $baseUrl - check the server is running and reachable.",
                         isLoading = false,
                     ),
-                    serverUnreachable = true,
+                    serverUnreachable = !onDevice,
                 )
             }
             streamJob = null
@@ -638,9 +641,26 @@ open class ChatViewModel @Inject constructor(
         }
     }
 
+    private fun resolveTransport(): ChatTransport? =
+        if (_uiState.value.appModelMode == AppModelMode.OnDevice) {
+            localTransport
+        } else {
+            remoteTransport
+        }
+
+    private fun outgoingConversationId(onDevice: Boolean, localConvoId: String): String? {
+        if (onDevice) return "$LOCAL_CONVERSATION_PREFIX$localConvoId"
+        return _uiState.value.chatState.conversationId
+            ?.takeUnless { it.startsWith(LOCAL_CONVERSATION_PREFIX) }
+    }
+
     private fun parseIsoEpochMs(iso: String): Long = try {
         java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli()
     } catch (_: Exception) {
         0L
+    }
+
+    companion object {
+        const val LOCAL_CONVERSATION_PREFIX = "local:"
     }
 }

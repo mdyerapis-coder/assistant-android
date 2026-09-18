@@ -25,6 +25,9 @@ android {
 
 dependencies {
     implementation(project(":core:network"))
+    implementation(project(":core:model"))
+    implementation(project(":core:database"))
+    implementation(project(":backend-client"))
     implementation(libs.okhttp)
     implementation(libs.mediapipe.tasks.genai)
     implementation(libs.hilt.android)

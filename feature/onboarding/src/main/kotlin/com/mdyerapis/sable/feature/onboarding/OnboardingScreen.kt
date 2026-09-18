@@ -322,6 +322,19 @@ private fun ConnectForm(
                         Text("Wake up Sable", style = MaterialTheme.typography.labelLarge)
                     }
                 }
+
+                TextButton(
+                    onClick = { viewModel.continueOnDeviceWithoutServer() },
+                    enabled = !uiState.isLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Continue on-device without the server")
+                }
+                Text(
+                    "On-device chat uses MediaPipe on this phone. Local reminders fire here with WorkManager. Calendar and Gmail still need the cloud assistant — no Google client_secret is stored here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

@@ -1,8 +1,9 @@
 package com.mdyerapis.sable.feature.chat
 
-import android.widget.Toast
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
@@ -100,6 +101,21 @@ fun ChatScreen(
         }
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* local reminders silently no-op if the user declines */ }
+
+    LaunchedEffect(uiState.appModelMode) {
+        if (uiState.appModelMode != AppModelMode.OnDevice) return@LaunchedEffect
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     fun startVoiceInput() {
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.RECORD_AUDIO
@@ -114,6 +130,7 @@ fun ChatScreen(
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.ensureCloudClient()
         viewModel.refreshGoogleStatus()
     }
 
@@ -302,7 +319,11 @@ fun ChatScreen(
                     }
                 },
                 enabled = true,
-                placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) "Message local model..." else "Ask assistant...",
+                placeholder = if (uiState.appModelMode == AppModelMode.OnDevice) {
+                    "Chat or set a reminder..."
+                } else {
+                    "Ask assistant..."
+                },
                 isStreaming = uiState.chatState.isLoading,
                 onStop = { viewModel.stopGenerating() },
                 modifier = Modifier.imePadding(),
@@ -351,6 +372,30 @@ fun ChatScreen(
                                 androidx.compose.material3.Text("Re-configure")
                             }
                         }
+                    }
+                }
+            }
+            if (uiState.appModelMode == AppModelMode.OnDevice) {
+                OnDeviceCapabilityBanner(hasCloudSession = uiState.hasCloudSession)
+            } else if (!uiState.hasCloudSession) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Cloud assistant isn't connected.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            "Paste a bearer token from onboarding, or switch to On-Device LLM.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
                     }
                 }
             }
@@ -412,7 +457,11 @@ fun ChatScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "Chat privately and offline on your phone" else "Ask anything or check calendar, email, and reminders",
+                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) {
+                                        "Private on-device chat and local reminders. Calendar, Gmail, and SMS still need the cloud assistant."
+                                    } else {
+                                        "Ask anything or check calendar, email, and reminders"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -428,8 +477,8 @@ fun ChatScreen(
                                 val suggestions = if (uiState.appModelMode == AppModelMode.OnDevice) {
                                     listOf(
                                         "Say hello" to "Say hello and introduce yourself!",
-                                        "Write a haiku" to "Write a haiku about technology.",
-                                        "Explain quantum computing" to "Explain quantum computing in simple terms.",
+                                        "Remind me" to "Remind me to stretch in 30 minutes",
+                                        "My reminders" to "what are my reminders",
                                     )
                                 } else {
                                     listOf(
@@ -561,6 +610,34 @@ fun ChatScreen(
                     } else null
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun OnDeviceCapabilityBanner(hasCloudSession: Boolean) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "On-device chat — no remote LLM.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            Text(
+                if (hasCloudSession) {
+                    "Reminders fire on this phone (WorkManager, no FCM). Calendar and Gmail still run on the cloud assistant (O1 Google relay). SMS on-device is not built yet (P2)."
+                } else {
+                    "Reminders fire on this phone (WorkManager + a local notification). Calendar, Gmail, and SMS need the cloud assistant. Connect a bearer token when you want those; the phone never holds a Google client_secret."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
         }
     }
 }
