@@ -114,6 +114,7 @@ fun ChatScreen(
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.ensureCloudClient()
         viewModel.refreshGoogleStatus()
     }
 
@@ -354,6 +355,30 @@ fun ChatScreen(
                     }
                 }
             }
+            if (uiState.appModelMode == AppModelMode.OnDevice) {
+                OnDeviceCapabilityBanner(hasCloudSession = uiState.hasCloudSession)
+            } else if (!uiState.hasCloudSession) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Cloud assistant isn't connected.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            "Paste a bearer token from onboarding, or switch to On-Device LLM.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
             // Messages stream list — layered over a static droid watermark.
             val watermarkDark = androidx.compose.foundation.isSystemInDarkTheme()
             val watermarkEmber = MaterialTheme.colorScheme.primary
@@ -412,7 +437,11 @@ fun ChatScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) "Chat privately and offline on your phone" else "Ask anything or check calendar, email, and reminders",
+                                    text = if (uiState.appModelMode == AppModelMode.OnDevice) {
+                                        "Private on-device chat. Calendar, Gmail, and reminders still need the cloud assistant."
+                                    } else {
+                                        "Ask anything or check calendar, email, and reminders"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -561,6 +590,34 @@ fun ChatScreen(
                     } else null
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun OnDeviceCapabilityBanner(hasCloudSession: Boolean) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "On-device chat — no remote LLM.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+            Text(
+                if (hasCloudSession) {
+                    "Calendar, Gmail, and reminders still run on the cloud assistant (O1 Google relay). SMS on-device is not built yet (P2)."
+                } else {
+                    "Calendar, Gmail, reminders, and SMS need the cloud assistant. Connect a bearer token when you want tools; the phone never holds a Google client_secret."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
         }
     }
 }

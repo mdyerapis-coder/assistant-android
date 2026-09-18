@@ -35,7 +35,7 @@ fun AppNavHost() {
     var startDestination by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        startDestination = if (gateViewModel.hasToken()) "sessions" else "onboarding"
+        startDestination = gateViewModel.startRoute()
     }
 
     val resolved = startDestination ?: return
@@ -101,7 +101,8 @@ fun AppNavHost() {
             popExitTransition = { slideOutHorizontally(tween(TRANSITION_DURATION, easing = FastOutSlowInEasing)) { it } }
         ) {
             SettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onConnectCloud = { navController.navigate("onboarding") },
             )
         }
     }
@@ -117,4 +118,10 @@ class NavGateViewModel @Inject constructor(
     private val tokenRepository: BearerTokenRepository,
 ) : ViewModel() {
     fun hasToken(): Boolean = tokenRepository.getToken() != null
+
+    fun startRoute(): String = when {
+        tokenRepository.getToken() != null -> "sessions"
+        tokenRepository.hasOnDeviceAccess() -> "chat"
+        else -> "onboarding"
+    }
 }

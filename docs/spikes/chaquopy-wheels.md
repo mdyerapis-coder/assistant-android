@@ -187,10 +187,11 @@ What the evidence actually shows:
    **do** resolve. Those successes are not enough to embed *this* backend.
 
 Fallback per ADR-012: Option C (deepen on-device mode) if the goal is "works
-without the server"; Option B (Kotlin/Ktor rewrite) if the embed ever needs
-to be the primary product. Revisit Option A only with a funded Android-wheel
-pipeline (cibuildwheel / Chaquopy recipes) and a pin freeze — that is not
-step 1 passing.
+without the server" — see [`option-c-on-device.md`](./option-c-on-device.md);
+Option B (Kotlin/Ktor rewrite) if the embed ever needs to be the primary
+product. Revisit Option A only with a funded Android-wheel pipeline
+(cibuildwheel / Chaquopy recipes) and a pin freeze — that is not step 1
+passing.
 
 ## What this repo contains
 

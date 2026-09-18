@@ -675,6 +675,128 @@ class ChatViewModelTest {
         settle(viewModel)
     }
 
+    @Test
+    fun onDeviceAccessWithoutToken_startsInOnDeviceMode() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertFalse(viewModel.uiState.value.hasCloudSession)
+        assertTrue(viewModel.uiState.value.showLocalModelDialog)
+    }
+
+    @Test
+    fun onDeviceSend_streamsThroughChatReducerAndPersistsAssistant() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        modelPrefs.setAppModelMode(AppModelMode.OnDevice)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val modelFile = File(filesDir, "models/gemma-3n-E2B-it.task")
+        modelFile.parentFile!!.mkdirs()
+        modelFile.writeText("dummy-weights")
+        localRepo.checkInstalledState()
+        val store = FakeConversationStore()
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {
+                override suspend fun generate(
+                    prompt: String,
+                    replaceInput: Boolean,
+                    onPartial: suspend (String) -> Unit,
+                ): String {
+                    onPartial("On-device ")
+                    onPartial("reply")
+                    return "On-device reply"
+                }
+            },
+            conversationStore = store,
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+
+        viewModel.sendMessage("hello local")
+        settle(viewModel)
+
+        val messages = viewModel.uiState.value.chatState.messages
+        assertTrue(messages.any { it.role == "user" && it.content == "hello local" })
+        assertTrue(
+            "assistant content=" + messages.filter { it.role == "assistant" }.joinToString { it.content },
+            messages.any { it.role == "assistant" && it.content == "On-device reply" },
+        )
+        assertFalse(viewModel.uiState.value.chatState.isLoading)
+        val convoId = viewModel.uiState.value.availableSessions.first().id
+        val captured = store.capturedMessages(convoId)
+        assertTrue(captured.any { it.role == "assistant" && it.content == "On-device reply" })
+    }
+
+    @Test
+    fun setBackendModeWithoutToken_staysOffCloud() = runTest(testDispatcher) {
+        val modelPrefs = ModelPreferenceRepository(context)
+        val tokenRepo = object : BearerTokenRepository(context) {
+            override fun getToken(): String? = null
+            override fun getBaseUrl(): String? = null
+            override fun hasOnDeviceAccess(): Boolean = true
+        }
+        val googleManager = object : GoogleAccountManager(context, OkHttpClient()) {
+            override suspend fun status(): Boolean = false
+        }
+        val localRepo = LocalModelRepository(context, OkHttpClient())
+        val viewModel = object : ChatViewModel(
+            tokenRepository = tokenRepo,
+            googleAccountManager = googleManager,
+            googleOAuthCompletionNotifier = GoogleOAuthCompletionNotifier(),
+            modelPreferenceRepository = modelPrefs,
+            localModelRepository = localRepo,
+            llmInferenceService = object : LlmInferenceService(context, localRepo) {},
+            conversationStore = FakeConversationStore(),
+            externalIntake = ExternalIntake(),
+        ) {
+            override fun createThreadsApi(client: OkHttpClient, baseUrl: String): ThreadsApi =
+                FakeThreadsApi()
+        }
+        settle(viewModel)
+        viewModel.setAppModelMode(AppModelMode.Backend)
+        settle(viewModel)
+        assertEquals(AppModelMode.OnDevice, viewModel.uiState.value.appModelMode)
+        assertTrue(viewModel.uiState.value.chatState.error!!.contains("bearer token"))
+    }
+
     /**
      * Pump until the ViewModel has no in-flight work (model catalog, thread
      * sync, chat streams, queues). Replaces advanceUntilIdle in this file:

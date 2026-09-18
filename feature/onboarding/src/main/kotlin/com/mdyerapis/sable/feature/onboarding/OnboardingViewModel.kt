@@ -54,6 +54,15 @@ class OnboardingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(baseUrl = baseUrl, error = null)
     }
 
+    fun continueOnDeviceWithoutServer() {
+        tokenRepository.setOnDeviceAccess(true)
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            error = null,
+            isDone = true,
+        )
+    }
+
     fun submit() {
         val state = _uiState.value
         if (state.token.isBlank() || state.baseUrl.isBlank()) {

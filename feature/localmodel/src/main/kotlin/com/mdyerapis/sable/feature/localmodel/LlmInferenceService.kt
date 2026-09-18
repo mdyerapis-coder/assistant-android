@@ -17,7 +17,10 @@ open class LlmInferenceService @Inject constructor(
     private val localModelRepository: LocalModelRepository
 ) {
     @Volatile
-    private var activeInference: LlmInference? = null
+    private var cachedInference: LlmInference? = null
+
+    @Volatile
+    private var cachedPath: String? = null
 
     open suspend fun generate(
         prompt: String,
@@ -37,12 +40,7 @@ open class LlmInferenceService @Inject constructor(
         }
 
         try {
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(state.path)
-                .build()
-
-            val instance = LlmInference.createFromOptions(context, options)
-            activeInference = instance
+            val instance = instanceFor(state.path)
             val future = instance.generateResponseAsync(
                 prompt,
                 ProgressListener<String> { partialResult, _ ->
@@ -58,11 +56,40 @@ open class LlmInferenceService @Inject constructor(
         } finally {
             channel.close()
             consumerJob.join()
-            activeInference = null
         }
     }
 
     open fun cancel() {
-        activeInference = null
+        releaseEngine()
+    }
+
+    @Synchronized
+    private fun instanceFor(path: String): LlmInference {
+        val hit = cachedInference
+        if (hit != null && cachedPath == path) return hit
+        closeQuietly(hit)
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(path)
+            .build()
+        val created = LlmInference.createFromOptions(context, options)
+        cachedInference = created
+        cachedPath = path
+        return created
+    }
+
+    @Synchronized
+    private fun releaseEngine() {
+        closeQuietly(cachedInference)
+        cachedInference = null
+        cachedPath = null
+    }
+
+    private fun closeQuietly(instance: LlmInference?) {
+        if (instance == null) return
+        try {
+            instance.close()
+        } catch (_: Exception) {
+            // Engine close is best-effort; a later createFromOptions recovers.
+        }
     }
 }
