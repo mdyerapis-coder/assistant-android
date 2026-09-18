@@ -16,7 +16,6 @@ import com.mdyerapis.sable.feature.localmodel.DefaultLocalReminderGateway
 import com.mdyerapis.sable.feature.localmodel.LlmInferenceService
 import com.mdyerapis.sable.feature.localmodel.LocalModelRepository
 import com.mdyerapis.sable.feature.localmodel.LocalModelState
-import com.mdyerapis.sable.feature.localmodel.LocalModelState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
